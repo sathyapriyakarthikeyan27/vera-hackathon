@@ -1,0 +1,12 @@
+{
+  "name": "vera-demo-recorder",
+  "version": "1.0.0",
+  "description": "Playwright-based video recorder for the VERA app demo",
+  "scripts": {
+    "record": "node record.js",
+    "install-browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}

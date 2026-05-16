@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# Environment
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Database (local dev only — never commit data)
+*.db
+*.sqlite
+*.sqlite3
+
+# Demo videos (too large for git — use LFS or store separately)
+demo/videos/*.mp4
+demo/videos/*.webm
+
+# Programmatic demo recorder (separate tool, not part of the app)
+demo-recorder/node_modules/
+demo-recorder/output/
+
+# Claude Code internal session memory
+memory/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.pytest_cache/
+htmlcov/
+
+# Deployment
+deploy/secrets/

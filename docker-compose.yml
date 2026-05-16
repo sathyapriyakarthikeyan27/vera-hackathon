@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: vera
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vera_dev}
+      POSTGRES_DB: vera
+    ports:
+      - "5432:5432"
+    volumes:
+      - vera_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vera -d vera"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DATABASE_URL: postgresql://vera:${POSTGRES_PASSWORD:-vera_dev}@db:5432/vera
+      CORS_ORIGINS: "http://localhost:3000"
+      SESSION_SECRET: ${SESSION_SECRET:-dev-secret-change-in-production}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  vera_pgdata:
+    driver: local
