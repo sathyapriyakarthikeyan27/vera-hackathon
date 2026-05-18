@@ -63,7 +63,7 @@ export default function RecordsPage() {
       setReconciling(true);
       const verdict = await reconcileRisk(sid);
       setReconcile(verdict);
-    } catch (e) {
+    } catch {
       setError("Upload failed. Please try again.");
     } finally {
       setUploading(false);
@@ -71,10 +71,10 @@ export default function RecordsPage() {
     }
   }
 
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
+  function onDrop(_e: React.DragEvent) {
+    _e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
+    const file = _e.dataTransfer.files[0];
     if (file) handleFile(file);
   }
 

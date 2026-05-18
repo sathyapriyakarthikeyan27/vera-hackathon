@@ -263,7 +263,7 @@ export default function Home() {
             style={{ fontSize: 12 }}
           >
             VERA is here to inform and guide, not to diagnose. Please always
-            speak with a qualified doctor. I'll help you find one.
+            speak with a qualified doctor. I&apos;ll help you find one.
           </p>
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className="text-[#888780]" style={{ fontSize: 11 }}>Powered by</span>

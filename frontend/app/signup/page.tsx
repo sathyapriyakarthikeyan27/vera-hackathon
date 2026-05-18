@@ -75,7 +75,7 @@ export default function SignupPage() {
       <div className="max-w-lg mx-auto px-4 py-10">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-slate-900 mb-2">
-            Let's get started
+            Let&apos;s get started
           </h1>
           <p className="text-stone-500 text-sm leading-relaxed">
             A few quick details so VERA can find you the right support.
@@ -87,7 +87,7 @@ export default function SignupPage() {
           {/* Name */}
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <label className="block text-sm font-semibold text-slate-800 mb-3">
-              What's your name?
+              What&apos;s your name?
             </label>
             <input
               type="text"
