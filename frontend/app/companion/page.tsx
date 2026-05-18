@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { generateFollowup, simulateCheckin } from "@/lib/api";
 import type { CompanionOutput, FollowUpItem } from "@/lib/api";
@@ -12,6 +13,7 @@ const LANG_LABELS: Record<string, string> = {
 };
 
 export default function CompanionPage() {
+  const router = useRouter();
   const [output, setOutput] = useState<CompanionOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +26,8 @@ export default function CompanionPage() {
     async function load() {
       const sid = localStorage.getItem("vera_session_id");
       if (!sid) {
-        setError("No session found. Please start from the beginning.");
-        setLoading(false);
+        localStorage.removeItem("vera_session_id");
+        router.replace("/signup");
         return;
       }
       try {
@@ -38,7 +40,7 @@ export default function CompanionPage() {
       }
     }
     load();
-  }, []);
+  }, [router]);
 
   async function handleSimulate() {
     const sid = localStorage.getItem("vera_session_id");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { generateEducation, generateFollowup } from "@/lib/api";
 import type { EducationOutput, EducationSection } from "@/lib/api";
@@ -12,6 +13,7 @@ const CANCER_EMOJI: Record<string, string> = {
 };
 
 export default function LearnPage() {
+  const router = useRouter();
   const [output, setOutput] = useState<EducationOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +24,8 @@ export default function LearnPage() {
     async function load() {
       const sid = localStorage.getItem("vera_session_id");
       if (!sid) {
-        setError("No session found. Please start from the beginning.");
-        setLoading(false);
+        localStorage.removeItem("vera_session_id");
+        router.replace("/signup");
         return;
       }
       try {
@@ -36,7 +38,7 @@ export default function LearnPage() {
       }
     }
     load();
-  }, []);
+  }, [router]);
 
   async function handleCompanion() {
     const sid = localStorage.getItem("vera_session_id");
@@ -88,6 +90,16 @@ export default function LearnPage() {
             {output.personalized_intro}
           </p>
         </div>
+
+        {output.video_url && (
+          <div className="bg-black rounded-2xl overflow-hidden shadow-sm">
+            <video
+              src={output.video_url}
+              controls
+              className="w-full h-auto"
+            />
+          </div>
+        )}
 
         {/* Sections accordion */}
         {output.sections && output.sections.length > 0 && (

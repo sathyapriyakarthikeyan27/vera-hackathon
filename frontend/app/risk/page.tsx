@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSession, matchSchemes } from "@/lib/api";
 import type { VERASession, RiskProfile, TimelineEvent, RiskAssessmentConflict } from "@/lib/api";
@@ -45,6 +46,7 @@ interface ExtendedRiskProfile extends RiskProfile {
 }
 
 export default function RiskPage() {
+  const router = useRouter();
   const [session, setSession] = useState<VERASession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,8 +56,8 @@ export default function RiskPage() {
     async function load() {
       const sid = localStorage.getItem("vera_session_id");
       if (!sid) {
-        setError("No session found. Please start from the beginning.");
-        setLoading(false);
+        localStorage.removeItem("vera_session_id");
+        router.replace("/signup");
         return;
       }
       try {
@@ -68,7 +70,7 @@ export default function RiskPage() {
       }
     }
     load();
-  }, []);
+  }, [router]);
 
   async function handleViewSchemes() {
     if (!session) return;

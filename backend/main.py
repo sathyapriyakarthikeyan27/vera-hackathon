@@ -12,8 +12,21 @@ from routers import risk, schemes, education, companion, records
 load_dotenv()
 
 
+def validate_environment() -> None:
+    missing = []
+    if not os.getenv("DATABASE_URL"):
+        missing.append("DATABASE_URL")
+    if not os.getenv("GEMINI_API_KEY"):
+        missing.append("GEMINI_API_KEY")
+    if missing:
+        raise RuntimeError(
+            "Missing required environment variables: " + ", ".join(missing)
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_environment()
     await init_db()
     from db.seed import seed_scheme_data
     await seed_scheme_data()

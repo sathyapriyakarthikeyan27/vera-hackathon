@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { uploadRecord, reconcileRisk } from "@/lib/api";
@@ -22,6 +22,14 @@ export default function RecordsPage() {
   const [reconcile, setReconcile] = useState<ReconcileResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sid = localStorage.getItem("vera_session_id");
+    if (!sid) {
+      localStorage.removeItem("vera_session_id");
+      router.replace("/signup");
+    }
+  }, [router]);
 
   async function handleFile(file: File) {
     const sid = localStorage.getItem("vera_session_id");
