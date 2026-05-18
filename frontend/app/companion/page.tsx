@@ -49,7 +49,7 @@ export default function CompanionPage() {
       const result = await simulateCheckin(sid);
       setCheckinMessage(result.checkin_message);
     } catch {
-      setCheckinMessage("Hi, just checking in — it's been a few days. Have you had a chance to book your screening?");
+      setCheckinMessage("Hi, just checking in. It's been a few days. Have you had a chance to book your screening?");
     } finally {
       setCheckinLoading(false);
     }
@@ -169,7 +169,7 @@ export default function CompanionPage() {
               Message for a Loved One
             </h2>
             <p className="text-xs text-stone-400 mb-4">
-              Share this with someone you trust — a message asking for support.
+              Share this with someone you trust. A message asking for support.
             </p>
 
             {/* Language tabs */}

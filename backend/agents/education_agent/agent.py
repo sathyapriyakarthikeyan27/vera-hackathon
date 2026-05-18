@@ -23,7 +23,7 @@ _FALLBACK_SECTIONS = [
     {
         "title": "What is cervical cancer?",
         "content": (
-            "Cervical cancer develops in the cells lining the cervix — the lower part of the uterus. "
+            "Cervical cancer develops in the cells lining the cervix, the lower part of the uterus. "
             "It is one of the most preventable cancers when caught early through regular screening. "
             "Most cases are linked to the Human Papillomavirus (HPV), a very common infection."
         ),
@@ -32,7 +32,7 @@ _FALLBACK_SECTIONS = [
         "title": "What does a Pap smear involve?",
         "content": (
             "A Pap smear is a quick, simple test done at a clinic. A doctor gently collects a small "
-            "sample of cells from your cervix using a soft brush — it takes about 5 minutes. "
+            "sample of cells from your cervix using a soft brush. It takes about 5 minutes. "
             "Many women feel mild discomfort but no real pain, and it is over very quickly."
         ),
     },
@@ -48,7 +48,7 @@ _FALLBACK_SECTIONS = [
         "title": "After your screening",
         "content": (
             "Results usually arrive within 2–4 weeks by phone or letter. "
-            "A normal result means no abnormal cells were found — great news. "
+            "A normal result means no abnormal cells were found. Great news. "
             "If the result is unclear or shows changes, a doctor will explain the next steps calmly and clearly."
         ),
     },
@@ -115,7 +115,7 @@ Rules:
 
     fallback = (
         f"Understanding {cancer_type} cancer is one of the most important steps you can take for your health. "
-        "Here is everything you need to know — in plain language, at your own pace."
+        "Here is everything you need to know, in plain language, at your own pace."
     )
 
     return await gemini.generate_safe(prompt, fallback=fallback)

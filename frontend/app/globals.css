@@ -1,15 +1,188 @@
 @import "tailwindcss";
 
-@theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ─────────────────────────────────────────────────────────────────
+   CARE & CLARITY DESIGN SYSTEM — Tailwind v4
+   All token names match the reference HTML exactly.
+───────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Color tokens ──────────────────────────────────────────── */
+  --color-surface:                   #f7fafc;
+  --color-surface-dim:               #d8dadd;
+  --color-surface-bright:            #f7fafc;
+  --color-surface-container-lowest:  #ffffff;
+  --color-surface-container-low:     #f2f4f6;
+  --color-surface-container:         #eceef0;
+  --color-surface-container-high:    #e6e8eb;
+  --color-surface-container-highest: #e0e3e5;
+  --color-on-surface:                #181c1e;
+  --color-on-surface-variant:        #3f484d;
+  --color-inverse-surface:           #2d3133;
+  --color-inverse-on-surface:        #eff1f3;
+  --color-outline:                   #6f787d;
+  --color-outline-variant:           #bfc8cd;
+  --color-surface-tint:              #026783;
+
+  --color-primary:                   #006480;
+  --color-on-primary:                #ffffff;
+  --color-primary-container:         #2d7d9a;
+  --color-on-primary-container:      #fafdff;
+  --color-inverse-primary:           #87d0f0;
+
+  --color-secondary:                 #4a6549;
+  --color-on-secondary:              #ffffff;
+  --color-secondary-container:       #ccebc7;
+  --color-on-secondary-container:    #506b4f;
+
+  --color-tertiary:                  #835012;
+  --color-on-tertiary:               #ffffff;
+  --color-tertiary-container:        #a06829;
+  --color-on-tertiary-container:     #fffbff;
+
+  --color-error:                     #ba1a1a;
+  --color-on-error:                  #ffffff;
+  --color-error-container:           #ffdad6;
+  --color-on-error-container:        #93000a;
+
+  --color-primary-fixed:             #bce9ff;
+  --color-primary-fixed-dim:         #87d0f0;
+  --color-on-primary-fixed:          #001f29;
+  --color-on-primary-fixed-variant:  #004d63;
+
+  --color-secondary-fixed:           #ccebc7;
+  --color-secondary-fixed-dim:       #b0cfad;
+  --color-on-secondary-fixed:        #07200b;
+  --color-on-secondary-fixed-variant: #334d33;
+
+  --color-tertiary-fixed:            #ffdcbd;
+  --color-tertiary-fixed-dim:        #feb872;
+  --color-on-tertiary-fixed:         #2c1600;
+  --color-on-tertiary-fixed-variant: #693c00;
+
+  --color-background:                #f7fafc;
+  --color-on-background:             #181c1e;
+  --color-surface-variant:           #e0e3e5;
+
+  /* ── Shadows — teal-tinted ambient, never harsh black ─────── */
+  --shadow-soft:    0 4px 24px rgba(45, 125, 154, 0.08);
+  --shadow-soft-lg: 0 8px 40px rgba(45, 125, 154, 0.12);
+
+  /* ── Spacing tokens (match reference HTML exactly) ─────────── */
+  --spacing-stack-sm:                0.75rem;  /* 12px */
+  --spacing-stack-md:                1.5rem;   /* 24px */
+  --spacing-stack-lg:                3rem;     /* 48px */
+  --spacing-gutter:                  1.5rem;   /* 24px */
+  --spacing-container-padding-mobile:  1.25rem; /* 20px */
+  --spacing-container-padding-desktop: 2.5rem;  /* 40px */
 }
 
+@theme inline {
+  /* ── Font families (reference CSS vars set by next/font) ───── */
+  --font-montserrat: var(--font-montserrat-face);
+  --font-inter:      var(--font-inter-face);
+  --font-sans:       var(--font-inter-face);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   TYPOGRAPHY UTILITIES — compound classes (size + leading + tracking + weight + family)
+   Use these instead of stacking individual Tailwind size classes.
+───────────────────────────────────────────────────────────────── */
+
+@utility text-headline-xl {
+  font-family: var(--font-montserrat);
+  font-size: 2.5rem;
+  line-height: 3rem;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+@utility text-headline-lg {
+  font-family: var(--font-montserrat);
+  font-size: 2rem;
+  line-height: 2.5rem;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+}
+
+@utility text-headline-lg-mobile {
+  font-family: var(--font-montserrat);
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+}
+
+@utility text-headline-md {
+  font-family: var(--font-montserrat);
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+}
+
+@utility text-body-lg {
+  font-family: var(--font-inter);
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 400;
+}
+
+@utility text-body-md {
+  font-family: var(--font-inter);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 400;
+}
+
+@utility text-label-md {
+  font-family: var(--font-inter);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+}
+
+@utility text-label-sm {
+  font-family: var(--font-inter);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ELEVATION — teal-tinted ambient shadows
+───────────────────────────────────────────────────────────────── */
+
+@utility soft-elevation {
+  box-shadow: 0 4px 24px rgba(45, 125, 154, 0.08);
+}
+
+@utility soft-elevation-lg {
+  box-shadow: 0 8px 40px rgba(45, 125, 154, 0.12);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   BASE STYLES
+───────────────────────────────────────────────────────────────── */
+
 body {
-  background: #ffffff;
-  color: #2C2C2A;
+  font-family: var(--font-inter);
+  background-color: #f7fafc;
+  color: #181c1e;
+  font-size: 1rem;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   MATERIAL SYMBOLS
+───────────────────────────────────────────────────────────────── */
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ANIMATIONS
+───────────────────────────────────────────────────────────────── */
 
 @keyframes vera-pulse {
   0%, 100% { transform: translateY(0); opacity: 0.35; }

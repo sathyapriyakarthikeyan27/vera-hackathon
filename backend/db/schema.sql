@@ -3,9 +3,39 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Users: persistent identity, linked to auth tokens and sessions
+CREATE TABLE IF NOT EXISTS users (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email        VARCHAR(255) UNIQUE NOT NULL,
+    name         VARCHAR(255),
+    age_group    VARCHAR(20),
+    gender       VARCHAR(20),
+    location     VARCHAR(255),
+    language     VARCHAR(10) NOT NULL DEFAULT 'en',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Auth tokens: OTP codes and JWT session tokens
+-- token_type = 'otp' for email OTP codes (10-min TTL)
+-- token_type = 'session' for JWT jti references (30-day TTL)
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID REFERENCES users(id) ON DELETE CASCADE,
+    token_hash   VARCHAR(255) NOT NULL,
+    token_type   VARCHAR(20) NOT NULL CHECK (token_type IN ('otp', 'session')),
+    expires_at   TIMESTAMPTZ NOT NULL,
+    used         BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user   ON auth_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_expiry ON auth_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
+
 -- Sessions: JSONB blob per session, all agent outputs stored here
 CREATE TABLE IF NOT EXISTS sessions (
     session_id       UUID PRIMARY KEY,
+    user_id          UUID REFERENCES users(id) ON DELETE SET NULL,
     language         VARCHAR(10) NOT NULL DEFAULT 'en',
     user_name        VARCHAR(255),
     risk_state       JSONB,

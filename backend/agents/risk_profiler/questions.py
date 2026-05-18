@@ -6,21 +6,21 @@ Name, age, gender, location, and language are collected at sign-up — not here.
 QUESTIONS: list[dict] = [
     {
         "id": "q1",
-        "question": "Has anyone in your immediate family — a parent, sibling, or child — ever been diagnosed with cancer?",
+        "question": "Has anyone in your immediate family (a parent, sibling, or child) ever been diagnosed with cancer?",
         "type": "choice",
         "key": "family_history",
         "placeholder": "",
         "options": [
-            {"value": "yes_breast_ovarian", "label": "Yes — breast or ovarian cancer"},
-            {"value": "yes_cervical", "label": "Yes — cervical cancer"},
-            {"value": "yes_colorectal", "label": "Yes — colorectal cancer"},
-            {"value": "yes_other", "label": "Yes — another type"},
+            {"value": "yes_breast_ovarian", "label": "Yes, breast or ovarian cancer"},
+            {"value": "yes_cervical", "label": "Yes, cervical cancer"},
+            {"value": "yes_colorectal", "label": "Yes, colorectal cancer"},
+            {"value": "yes_other", "label": "Yes, another type"},
             {"value": "no", "label": "Not that I know of"},
         ],
     },
     {
         "id": "q2",
-        "question": "When did you last have a cancer screening — like a Pap smear, mammogram, or colonoscopy?",
+        "question": "When did you last have a cancer screening, like a Pap smear, mammogram, or colonoscopy?",
         "type": "choice",
         "key": "last_screening",
         "placeholder": "",

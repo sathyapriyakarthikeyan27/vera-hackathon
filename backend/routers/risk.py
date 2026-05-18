@@ -1,5 +1,6 @@
 """Risk Profiler Agent router."""
 
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -16,6 +17,7 @@ class AnswerRequest(BaseModel):
     session_id: str
     question_id: str
     answer: str
+    key: Optional[str] = None
 
 
 @router.post("/start")
@@ -29,7 +31,7 @@ async def start_risk(body: StartRequest):
 @router.post("/answer")
 async def answer_risk(body: AnswerRequest):
     result = await risk_agent.process_answer(
-        body.session_id, body.question_id, body.answer
+        body.session_id, body.question_id, body.answer, body.key
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
