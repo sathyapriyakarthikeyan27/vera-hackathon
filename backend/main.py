@@ -34,6 +34,7 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url=None,
+    root_path="/api",
 )
 
 _origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
