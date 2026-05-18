@@ -142,7 +142,7 @@ async def generate_medgemma_multimodal_safe(parts: list, fallback: str) -> str:
         return fallback
 
 
-async def embed_text(text: str, model: str = "models/text-embedding-004") -> list[float]:
+async def embed_text(text: str, model: str = "models/embedding-001") -> list[float]:
     """Generate a 768-dimensional embedding for the given text."""
     _configure()
     if not os.getenv("GEMINI_API_KEY", "").strip():
