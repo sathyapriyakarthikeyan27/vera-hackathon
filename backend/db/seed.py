@@ -29,7 +29,7 @@ _SCHEMES = [
             "Approximately 50 crore beneficiaries across India."
         ),
         "metadata": {
-            "eligibility": "Families in SECC database — bottom 40% by income",
+            "eligibility": "Families in SECC database, bottom 40% by income",
             "coverage": "Cervical, breast, oral, colorectal cancer screening and treatment",
             "url": "https://pmjay.gov.in",
         },
@@ -94,7 +94,7 @@ _SCHEMES = [
             "breast examination, and HPV testing at government health units nationwide."
         ),
         "metadata": {
-            "eligibility": "All Egyptian nationals — universal coverage",
+            "eligibility": "All Egyptian nationals. Universal coverage.",
             "coverage": "Free cancer screening, Pap smear, mammogram at NHIA facilities",
             "url": "https://nhia.gov.eg",
         },
@@ -111,7 +111,7 @@ _SCHEMES = [
         ),
         "metadata": {
             "eligibility": "All women, prioritising rural areas",
-            "coverage": "Free mobile cancer screening camps — cervical, breast",
+            "coverage": "Free mobile cancer screening camps: cervical, breast",
             "url": "https://100million.mohp.gov.eg",
         },
     },

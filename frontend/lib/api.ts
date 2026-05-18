@@ -25,7 +25,7 @@ async function request<T>(
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
-export type Language = "en" | "hi" | "ta";
+export type Language = "en" | "hi" | "ta" | "ar" | "fr" | "es" | "de" | "it" | "ja" | "zh";
 
 export interface VERASession {
   session_id: string;
@@ -53,7 +53,10 @@ export interface SignupData {
   age_group: string;
   gender: string;
   location: string;
-  language: Language;
+  language?: Language;
+  height_cm?: number;
+  weight_kg?: number;
+  date_of_birth?: string;
 }
 
 export async function signup(data: SignupData): Promise<{ session_id: string; language: Language; user_name: string }> {
@@ -253,16 +256,19 @@ export interface RiskQuestion {
   placeholder?: string;
   optional?: boolean;
   options?: Array<{ value: string; label: string }>;
+  why_we_ask?: string;
 }
 
 export interface RiskStartResponse {
   question: RiskQuestion;
+  total?: number;
 }
 
 export interface RiskAnswerResponse {
   complete: boolean;
   question?: RiskQuestion;
   risk_profile?: RiskProfile;
+  total?: number;
 }
 
 export async function startRisk(sessionId: string): Promise<RiskStartResponse> {
@@ -275,11 +281,12 @@ export async function startRisk(sessionId: string): Promise<RiskStartResponse> {
 export async function answerRisk(
   sessionId: string,
   questionId: string,
-  answer: string
+  answer: string,
+  key?: string
 ): Promise<RiskAnswerResponse> {
   return request<RiskAnswerResponse>("/risk/answer", {
     method: "POST",
-    body: JSON.stringify({ session_id: sessionId, question_id: questionId, answer }),
+    body: JSON.stringify({ session_id: sessionId, question_id: questionId, answer, key }),
   });
 }
 

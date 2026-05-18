@@ -1,6 +1,7 @@
 """
 Records Explainer Agent (Agent 3).
-Uses Gemini Vision to analyze uploaded medical documents (PDF, JPG, PNG).
+Uses MedGemma to analyze uploaded medical documents (PDF, JPG, PNG).
+MedGemma handles all document types including medical images.
 
 Dual output every time:
   1. Plain-language user explanation — in the user's language, no jargon
@@ -20,11 +21,15 @@ from fastapi import UploadFile
 from services.session_store import get_session, update_session
 from services import gemini
 
-_LANG_NAME = {"en": "English", "hi": "Hindi", "ta": "Tamil"}
+_LANG_NAME = {
+    "en": "English", "hi": "Hindi", "ta": "Tamil", "ar": "Arabic",
+    "fr": "French", "es": "Spanish", "de": "German", "it": "Italian",
+    "ja": "Japanese", "zh": "Chinese",
+}
 
 _FALLBACK_EXPLANATION = {
     "text": (
-        "VERA was unable to fully read this document — the file may be too small, "
+        "VERA was unable to fully read this document. The file may be too small, "
         "unclear, or in an unsupported format. Please try a higher-resolution scan.\n\n"
         "This is a plain-language explanation only. Please discuss all findings with your doctor."
     ),
@@ -65,6 +70,7 @@ async def analyze(session_id: str, file: UploadFile) -> Optional[dict]:
     risk_assessment: dict = session.get("risk_assessment") or {
         "score": risk_profile.get("risk_level", "Moderate"),
         "confidence": 0.7,
+        "reasoning": "",
         "source": "profile_only",
         "pending_signals": [],
         "reconciled": True,
@@ -96,10 +102,10 @@ async def _explain_document(
     content: bytes, mime_type: str, user_name: str, language: str
 ) -> dict:
     lang = _LANG_NAME.get(language, "English")
-    name_clause = f"Her name is {user_name}. " if user_name else ""
+    name_clause = f"This person's name is {user_name}. " if user_name else ""
     b64 = base64.b64encode(content).decode()
 
-    prompt = f"""You are VERA, a warm and caring women's health AI companion.
+    prompt = f"""You are VERA, a warm and caring health AI companion.
 
 {name_clause}Please explain this medical document in plain language in {lang}.
 
@@ -114,19 +120,21 @@ Rules:
 - No medical jargon without plain-language explanation in parentheses.
 - If something is flagged as abnormal, say so clearly but calmly.
 - End with: "This is a plain-language explanation only. Please discuss these findings with your doctor."
-- Write in {lang}."""
+- Write in {lang}.
+- Do not use em dashes."""
 
-    text = await gemini.generate_multimodal_safe(
+    text = await gemini.generate_medgemma_multimodal_safe(
         parts=[{"mime_type": mime_type, "data": b64}, prompt],
         fallback=_FALLBACK_EXPLANATION["text"],
     )
-    return {"text": text, "language": language, "document_type": ""}
+
+    return {"text": text or _FALLBACK_EXPLANATION["text"], "language": language, "document_type": ""}
 
 
 async def _extract_signals(content: bytes, mime_type: str) -> dict:
     b64 = base64.b64encode(content).decode()
 
-    prompt = """You are a medical AI assistant. Analyze this medical document and extract clinical signals.
+    prompt = """Analyze this medical document and extract clinical signals.
 
 Return ONLY valid JSON in this exact format — no prose, no markdown fences:
 {
@@ -146,25 +154,29 @@ Guidelines:
 - specialist_signal should be the exact specialist type if clearly indicated, else null"""
 
     try:
-        raw = await gemini.generate_multimodal(
+        raw = await gemini.generate_medgemma_multimodal(
             parts=[{"mime_type": mime_type, "data": b64}, prompt]
         )
         text = raw.strip()
         if text.startswith("```"):
-            parts = text.split("```")
-            text = parts[1] if len(parts) > 1 else text
+            parts_list = text.split("```")
+            text = parts_list[1] if len(parts_list) > 1 else text
             if text.startswith("json"):
                 text = text[4:]
         result = json.loads(text.strip())
-        return {
-            "anomalies": result.get("anomalies") or [],
-            "severity": result.get("severity", "medium"),
-            "confidence": float(result.get("confidence", 0.7)),
-            "specialist_signal": result.get("specialist_signal"),
-            "urgency_flag": bool(result.get("urgency_flag", False)),
-        }
     except Exception:
         return _FALLBACK_SIGNALS
+
+    if result is None:
+        return _FALLBACK_SIGNALS
+
+    return {
+        "anomalies": result.get("anomalies") or [],
+        "severity": result.get("severity", "medium"),
+        "confidence": float(result.get("confidence", 0.7)),
+        "specialist_signal": result.get("specialist_signal"),
+        "urgency_flag": bool(result.get("urgency_flag", False)),
+    }
 
 
 def _guess_doc_type(mime_type: str, filename: str) -> str:

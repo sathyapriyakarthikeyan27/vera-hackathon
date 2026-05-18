@@ -48,7 +48,7 @@ async def simulate_checkin(body: FollowupRequest):
     message = await gemini.generate_safe(
         prompt,
         fallback=(
-            f"Hi{name_clause} just checking in — it's been a few days since your VERA assessment. "
+            f"Hi{name_clause} just checking in. It's been a few days since your VERA assessment. "
             f"Have you had a chance to take your next step? I'm here if you need help finding the right clinic."
         ),
     )
