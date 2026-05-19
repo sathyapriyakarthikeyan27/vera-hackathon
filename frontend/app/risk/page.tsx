@@ -7,7 +7,7 @@ import type { VERASession, RiskProfile, RiskAssessmentConflict } from "@/lib/api
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 
-const MOCK = true; // set to false to use backend
+const MOCK = false; // set to true to use mock data
 
 const MOCK_SESSION: import("@/lib/api").VERASession = {
   session_id: "mock",
@@ -83,7 +83,7 @@ const RISK_CONFIG: Record<RiskLevel, {
 
 
 interface ExtendedRiskProfile extends RiskProfile {
-  medgemma_reasoning?: string;
+  ai_reasoning?: string;
 }
 
 export default function RiskPage() {
@@ -257,35 +257,11 @@ export default function RiskPage() {
           {/* Bottom — Schemes */}
           <div className="md:col-span-8 bg-surface-container-lowest rounded-2xl p-stack-md soft-elevation border border-outline-variant">
             <h2 className="text-headline-md text-primary mb-stack-md">Available Screening Schemes</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-stack-md">
-              <SchemeItem
-                name="Ayushman Bharat (PM-JAY)"
-                tag="Government · India"
-                body="Full coverage for cancer screenings. Over 500 million people are eligible."
-              />
-              <SchemeItem
-                name="NHIA Coverage"
-                tag="Government · Egypt"
-                body="National health insurance covers specialist consultations and screenings."
-              />
-              <SchemeItem
-                name="NHS Cancer Screening"
-                tag="Free · United Kingdom"
-                body="Free bowel, breast, and cervical screening programmes available nationwide."
-              />
-              <SchemeItem
-                name="Community Health Outreach"
-                tag="Regional Support"
-                body="Free mobile health clinics available monthly in your area."
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {schemesForLocation((session as any)?.risk_state?.answers?.location ?? "").map((s) => (
+                <SchemeItem key={s.name} name={s.name} tag={s.tag} body={s.body} />
+              ))}
             </div>
-            <Link
-              href="/care"
-              className="w-full bg-primary text-on-primary text-label-md py-4 rounded-full hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              Find Free Screenings Near Me
-              <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
-            </Link>
           </div>
 
           {/* Bottom — Hospital CTA with image */}
@@ -348,6 +324,44 @@ function RecommendationItem({
   );
   if (href) return <Link href={href} className="block">{inner}</Link>;
   return inner;
+}
+
+function schemesForLocation(location: string): Array<{ name: string; tag: string; body: string }> {
+  const loc = location.toLowerCase();
+  if (loc.includes("india")) {
+    return [
+      { name: "Ayushman Bharat (PM-JAY)", tag: "Government · India", body: "Full coverage for cancer screenings at empanelled hospitals. Over 500 million people are eligible." },
+      { name: "National Cancer Screening Programme", tag: "Free · India", body: "Free screening for oral, cervical, and breast cancers at government health centres across India." },
+    ];
+  }
+  if (loc.includes("egypt")) {
+    return [
+      { name: "NHIA Coverage", tag: "Government · Egypt", body: "National Health Insurance Authority covers specialist consultations and cancer screenings." },
+      { name: "Egyptian National Cancer Institute", tag: "Free · Egypt", body: "Free cancer screening and diagnostic services at NCI Cairo and affiliated centres." },
+    ];
+  }
+  if (loc.includes("uk") || loc.includes("united kingdom") || loc.includes("england") || loc.includes("scotland") || loc.includes("wales") || loc.includes("ireland")) {
+    return [
+      { name: "NHS Bowel Cancer Screening", tag: "Free · UK", body: "Free screening every 2 years for adults aged 50 to 74 across England, Wales, and Scotland." },
+      { name: "NHS Breast Screening Programme", tag: "Free · UK", body: "Free mammograms every 3 years for women aged 50 to 70, offered through the NHS." },
+    ];
+  }
+  if (loc.includes("italy") || loc.includes("milan") || loc.includes("rome") || loc.includes("turin") || loc.includes("florence")) {
+    return [
+      { name: "Servizio Sanitario Nazionale (SSN)", tag: "Free · Italy", body: "Italy's National Health Service provides free cancer screening for colorectal, breast, and cervical cancers." },
+      { name: "Piano Nazionale di Prevenzione", tag: "Government · Italy", body: "National prevention plan covers cancer screening for all residents through regional health authorities." },
+    ];
+  }
+  if (loc.includes("usa") || loc.includes("united states") || loc.includes("canada")) {
+    return [
+      { name: "CDC Cancer Screening Programmes", tag: "Government · USA", body: "CDC-funded breast and cervical cancer screening for uninsured or underinsured people across all US states." },
+      { name: "National Cancer Institute Resources", tag: "Free · USA / Canada", body: "NCI provides free cancer information, screening guidelines, and clinic finder for the US and Canada." },
+    ];
+  }
+  return [
+    { name: "WHO Cancer Screening Initiative", tag: "International", body: "WHO supports cancer screening access in over 150 countries with free resources and clinic referrals." },
+    { name: "Union for International Cancer Control", tag: "Global Support", body: "UICC connects people with cancer screening resources and specialist referrals worldwide." },
+  ];
 }
 
 function SchemeItem({ name, tag, body }: { name: string; tag: string; body: string }) {

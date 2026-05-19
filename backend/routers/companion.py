@@ -15,6 +15,11 @@ class FollowupRequest(BaseModel):
     session_id: str
 
 
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+
 @router.post("/followup")
 async def generate_followup(body: FollowupRequest):
     result = await companion_agent.generate_followup(body.session_id)
@@ -71,6 +76,53 @@ async def checkin_history(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
     history = await get_checkin_history(session_id)
     return {"history": history}
+
+
+@router.post("/chat")
+async def companion_chat(body: ChatRequest):
+    """Chat with VERA about uploaded records and risk profile."""
+    session = await get_session(body.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    user_name: str = session.get("user_name") or ""
+    records_output: dict = session.get("records_output") or {}
+    risk_assessment: dict = session.get("risk_assessment") or {}
+    risk_profile: dict = session.get("risk_profile") or {}
+
+    doc_explanation: str = records_output.get("text", "")
+    doc_type: str = records_output.get("document_type", "medical document")
+    risk_score: str = (
+        risk_assessment.get("score")
+        or risk_profile.get("risk_level", "Unknown")
+    )
+    risk_reasoning: str = (
+        risk_assessment.get("reasoning")
+        or risk_profile.get("plain_language_summary", "")
+    )
+
+    context_parts = [
+        f"You are VERA, a warm and caring health AI companion.",
+        f"User: {user_name or 'the user'}. Current risk level: {risk_score}.",
+    ]
+    if doc_explanation:
+        context_parts.append(
+            f"The user has uploaded a {doc_type}. Here is the plain-language explanation:\n{doc_explanation}"
+        )
+    if risk_reasoning:
+        context_parts.append(f"Risk reasoning: {risk_reasoning}")
+
+    context_parts += [
+        f"Answer the user's question based on the above context.",
+        "Rules: be warm and specific, never diagnose, no em dashes, 3-5 sentences unless more detail is needed.",
+        f"User question: {body.message}",
+    ]
+
+    reply = await gemini.generate_safe(
+        "\n\n".join(context_parts),
+        fallback="I'm having trouble processing that right now. Please try again, or speak with your doctor for guidance.",
+    )
+    return {"reply": reply}
 
 
 @router.get("/health")

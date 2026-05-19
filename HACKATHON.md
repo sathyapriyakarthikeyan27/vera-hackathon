@@ -8,126 +8,120 @@
 | Conference | Milan AI Week 2026 |
 | Platform | lablab.ai |
 | Track | Collaborative Agent Swarms |
-| Build Phase | May 13–19, 2026 |
+| Build Phase | May 13 to 19, 2026 |
 | Submission Deadline | May 19, 2026 at 5:00 PM |
 | Live Demo | May 20, 2026 — Milan, Italy |
+
+---
 
 ## Our Track: Collaborative Agent Swarms
 
 The Collaborative Agent Swarms track rewards:
 - Multiple agents that work together meaningfully
 - Clear division of responsibilities between agents
-- Emergent capability from collaboration (whole > sum of parts)
+- Emergent capability from collaboration (the whole is greater than the sum of its parts)
 - Real-world impact of the multi-agent system
 
-VERA's 4-agent architecture is purpose-built for this track. Each agent has a distinct role. No agent can achieve VERA's mission alone.
+VERA's 4-agent architecture is purpose-built for this track. The conflict detection mechanic — where Agent 3 findings change Agent 1's score — is the concrete proof of genuine agent collaboration.
 
 ---
 
 ## Technical Partners
 
-### Google Gemini
-- **Why required**: Multimodal understanding, multilingual generation, conversational reasoning
+### Google Gemini (Primary)
+
+- **Models used**: `gemini-2.5-flash` (Agents 1, 2, 4), `gemini-2.5-pro` (Agent 3)
 - **Award criteria**: Must demonstrate meaningful Gemini integration beyond basic API calls
-- **Our usage**: Risk Profiler conversation, Scheme description generation, Education script personalization, Companion multilingual output
-- **Model**: Gemini 2.0 Flash (speed) / Gemini 2.0 Pro (quality)
-- **Key requirement**: Show Gemini doing something non-trivial — personalized multilingual output qualifies
+- **Our usage**:
+  - Agent 1: AI-generated adaptive assessment questions, risk scoring, reconciliation
+  - Agent 2: Scheme matching, eligibility summarization, specialist routing
+  - Agent 3: Multimodal document analysis (PDF, JPG, PNG), clinical signal extraction
+  - Agent 4: Chat responses, follow-up plans, proactive check-in messages
+  - Embeddings: `models/embedding-001` for pgvector RAG (scheme matching)
 
-### MedGemma
-- **Why used**: Google's purpose-built medical AI model, trained on clinical literature
-- **Our usage**: Risk score calibration in the Risk Profiler agent — returns structured JSON with risk level, cancer types, and clinical reasoning
-- **Model**: `medgemma-4b-it` accessed via Google AI Studio (same GEMINI_API_KEY)
-- **Fallback**: Deterministic rule-based scoring if MedGemma is unavailable — demo never crashes
+### Vultr (Deployment)
 
-### Vultr
-- **Why required**: Backend deployment infrastructure
+- **Why required**: Backend deployment infrastructure for live demo
 - **Award criteria**: Backend must actually run on Vultr
-- **Our usage**: FastAPI backend deployed on Vultr Cloud Compute
-- **Region**: blr1 (Bangalore) for India latency demo
-- **Key requirement**: Backend URL must resolve to a Vultr IP; confirm with `curl` before submission
+- **Our usage**: Full-stack Docker deployment on Vultr Dedicated CPU (2 vCPU / 8GB)
+  - Docker Compose: `db` (pgvector), `backend` (FastAPI), `frontend` (Next.js), `caddy` (reverse proxy)
+  - Caddy handles port 80, routes `/api/*` to backend, `/*` to frontend
 
 ---
 
-## Judging Criteria & How VERA Scores
+## Judging Criteria and How VERA Scores
 
 | Criterion | Weight | VERA's Angle |
 |-----------|--------|-------------|
-| Model integration effectiveness | High | 3 partners used distinctly; Gemini for language, MedGemma for medical risk scoring, Vultr for infra |
-| Presentation clarity | High | 7-minute scripted demo with persona "Priya"; clear problem → solution arc |
-| Practical business impact | High | 600M women, real government schemes, real clinics, real barriers addressed |
-| Uniqueness and creativity | High | Cancer prevention AI companion targeting underserved women globally; multilingual, longitudinal memory |
+| Model integration effectiveness | High | Gemini 2.5 Flash + Pro used distinctly; Flash for reasoning/conversation, Pro for multimodal document analysis |
+| Presentation clarity | High | 7-minute scripted demo with Arjun persona; conflict card is the centrepiece |
+| Practical business impact | High | Cancer risk awareness for everyone, real government schemes, real cost barriers addressed |
+| Uniqueness and creativity | High | Conflict detection mechanic — two agents checking each other's conclusions, score changes in real time |
 
 ---
 
 ## Submission Requirements Checklist
 
 ### Technical
-- [ ] All partners integrated and demonstrable (Gemini, MedGemma, Vultr)
+
+- [ ] Google Gemini integrated and demonstrable (gemini-2.5-flash + gemini-2.5-pro)
 - [ ] Backend deployed and accessible on Vultr
-- [ ] GEMINI_API_KEY active and not rate-limited (covers both Gemini and MedGemma)
+- [ ] GEMINI_API_KEY active and not rate-limited
 - [ ] Full end-to-end demo flow works (tested 3x)
+- [ ] Conflict card fires after colonoscopy upload
 - [ ] GitHub repository public and linked
 
 ### Content
+
 - [ ] Project name: VERA — Vital Early Risk Advisor
 - [ ] Track: Collaborative Agent Swarms
 - [ ] Team members listed
-- [ ] Demo video (3 minutes max) uploaded — use pre-recorded as backup
+- [ ] Demo video (3 minutes max) uploaded
 - [ ] Project description written (see below)
 - [ ] Partner logos credited
 
 ### lablab.ai Submission Form Fields
+
 - **Project name**: VERA — Vital Early Risk Advisor
-- **Tagline**: The AI companion that gives women the truth about their health
+- **Tagline**: The AI companion that catches cancer risk before it becomes a crisis
 - **Track**: Collaborative Agent Swarms
-- **Partners used**: Google Gemini, MedGemma, Vultr
+- **Partners used**: Google Gemini, Vultr
 - **GitHub URL**: [to be added]
-- **Demo URL**: [to be added]
+- **Demo URL**: `http://<vultr-ip>`
 - **Demo video**: [upload pre-recorded walkthrough]
 
 ---
 
 ## Project Description (for submission)
 
-> 600 million women skip cancer screenings every year — not because they don't care, but because no one gave them the truth about their risk, in their language, at the right moment.
+> VERA (Vital Early Risk Advisor) is a proactive cancer risk companion powered by 4 collaborative AI agents. In a 7-minute interaction, VERA:
 >
-> VERA (Vital Early Risk Advisor) is a 4-agent AI companion for women's cancer prevention. In one 7-minute conversation, VERA:
+> - **Agent 1 — Risk Profiler**: Generates adaptive assessment questions using Gemini 2.5 Flash, personalised to the user's gender, age, BMI, location, and prior answers. Scores cancer risk and produces a plain-language explanation of why.
 >
-> - **Risk Profiler Agent**: Assesses personalized cancer risk through 8 conversational questions, producing a risk score and visual screening timeline (Gemini conversation + MedGemma medical risk scoring)
-> - **Scheme Navigator Agent**: Matches the user to free government health programs and finds the 3 nearest free screening clinics with female doctors (Gemini, location-aware)
-> - **Education Agent**: Generates a personalized animated video explaining exactly what a screening involves — in her language, matched to her risk type (Gemini)
-> - **Companion Agent**: Remembers her across sessions, drafts a family message to overcome social stigma, and creates a follow-up plan so she never falls through the cracks (Gemini, multilingual: English, Hindi, Tamil)
+> - **Agent 2 — Care Navigator**: Matches the user to free government health programs (Ayushman Bharat, NHS, NHIA) and finds the nearest specialist using pgvector similarity search over synthetic scheme data.
 >
-> Built on Google Gemini, MedGemma (Google's medical AI model), and deployed on Vultr. VERA is not a diagnostic tool — she's the bridge between risk and action.
+> - **Agent 3 — Records Explainer**: Reads uploaded lab reports and MRI scans using Gemini 2.5 Pro (multimodal). Produces two outputs: a plain-language explanation for the user, and structured clinical signals written to the shared risk assessment object for Agent 1.
 >
-> In India, 70% of cervical cancer cases are detected at Stage 3 or 4. VERA exists to change that number.
+> - **Agent 4 — Companion**: Powers proactive check-ins, report Q&A chat, and follow-up plans. Uses the full session context to answer questions about the user's actual uploaded document.
+>
+> The defining feature is conflict detection: Agent 3 surfaces clinical evidence that contradicts Agent 1's profile-based score. Agent 1 reconciles both sources, detects the conflict, and updates the risk level — surfacing the change to the user with a plain-language explanation. The agents are not a pipeline; they check each other's conclusions.
+>
+> Built on Google Gemini 2.5 Flash and Pro. Deployed on Vultr with Docker Compose.
 
 ---
 
-## Timeline — Build Week
+## Build Timeline
 
-| Day | Date | Goal |
-|-----|------|------|
-| Day 1 | May 13 | Repo setup, frontend skeleton, backend scaffold, API keys |
-| Day 2 | May 14 | Risk Profiler agent: Gemini conversation + MedGemma risk scoring |
-| Day 3 | May 15 | Scheme Navigator: seed data + matching logic + clinic cards |
-| Day 4 | May 16 | Education Agent: video assets + Gemini personalization |
-| Day 5 | May 17 | Companion Agent: session memory + follow-up + family message |
-| Day 6 | May 18 | Full integration, demo flow polish, Vultr deployment |
-| Day 7 | May 19 | Bug fixes, demo rehearsal, submission by 5PM |
-| Demo Day | May 20 | Live presentation — Milan |
-
----
-
-## Team Roles
-
-| Role | Responsibility |
-|------|---------------|
-| Technical Developer (you) | Full-stack lead, all implementation, Claude Code primary |
-| Developer Leader | Technical architecture decisions, code review |
-| Developer/Designer | Frontend UI/UX, demo visuals, video assets |
-| Project Manager | Timeline, submission form, coordination |
-| Business Project Manager | Pitch narrative, judging criteria alignment, demo script |
+| Day | Date | Status | Focus |
+|-----|------|--------|-------|
+| Day 1 | May 13 | Done | Repo setup, frontend skeleton, backend scaffold |
+| Day 2 | May 14 | Done | Risk assessment schema, Agent 1 initial profiling |
+| Day 3 | May 15 | Done | Signup flow, DB bootstrap, Agent 1 reconcile mode |
+| Day 4 | May 16 | Done | Agent 3 dual output, conflict detection, Agent 2, Agent 4, Care & Clarity UI |
+| Day 5 | May 17 | Done | Assessment page, AI-generated questions, localStorage session, BMI, CityCombobox |
+| Day 6 | May 18 | Done | Full demo run, Vultr deployment, MOCK=false on all pages, docs updated |
+| Day 7 | May 19 | Today | Bug fixes, model update (gemini-2.5-flash), chat fix, submit by 5PM |
+| Demo Day | May 20 | Tomorrow | Live presentation — Milan |
 
 ---
 
@@ -135,9 +129,8 @@ VERA's 4-agent architecture is purpose-built for this track. Each agent has a di
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|-----------|
-| MedGemma availability / quota | Low | Rule-based fallback always active; demo never depends on MedGemma exclusively |
-| Gemini rate limits during demo | Low | Use cached responses for demo; separate demo API key |
-| Vultr deployment fails | Low | Keep local fallback running; deploy by Day 6 |
-| Video pipeline too complex | Medium | Use pre-rendered segments; Gemini provides narration text only |
-| Demo overruns 7 minutes | Medium | Practice 5x before day; cut Education video to 45s if needed |
+| Gemini rate limits during demo | Low | Separate demo API key with higher quota; retry logic built in |
+| Vultr deployment fails | Low | Keep full Docker Compose local fallback; deploy confirmed before demo |
+| Conflict card does not fire | Low | Test Arjun persona end-to-end 3x before demo; fallback: describe mechanic verbally |
+| Demo overruns 7 minutes | Medium | Practice 5x before day; cut companion section if behind |
 | Internet fails at venue | Medium | Mobile hotspot + pre-recorded backup always ready |

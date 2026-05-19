@@ -2,287 +2,243 @@
 
 ## Agent Orchestration Model
 
-VERA uses a sequential pipeline with a persistent Companion Agent layer:
+VERA uses a deterministic router to dispatch incoming requests to the correct agent. No LLM decides routing — the conditions are code.
 
 ```
-[Risk Profiler] → [Scheme Navigator] → [Education Agent]
-                                              ↕
-                              [Companion Agent] (always active)
+Deterministic Router
+  ├── user.is_new            → Agent 1 (initial profiling)
+  ├── file_uploaded          → Agent 3 (records + signal extraction)
+  ├── scheduled_trigger      → Agent 4 (proactive check-in)
+  ├── pending_signals        → Agent 1 (reconcile mode)
+  └── default                → Agent 2 (care navigation)
 ```
 
-The Companion Agent holds session state and is consulted at every phase. The other 3 agents are invoked in sequence during a user session.
+All agents share state through a single session object in PostgreSQL. Agent 1 is the only agent that writes to `risk_assessment.score`. All other agents write to `pending_signals`.
 
 ---
 
 ## Agent 1: Risk Profiler
 
 ### Purpose
-Transform a 2-minute conversation into a personalized cancer risk fingerprint. Replace fear and confusion with clarity.
+Score cancer risk from the user's profile using AI-generated adaptive questions. Also runs as reconciler when Agent 3 surfaces new clinical signals.
 
-### The 8 Questions
+### Two Modes
 
-| # | Question | What It Captures |
-|---|----------|-----------------|
-| 1 | "How old are you?" | Age-based risk bracket |
-| 2 | "Has anyone in your immediate family been diagnosed with cancer?" | Hereditary risk |
-| 3 | "When did you last have a cancer screening? (Pap smear, mammogram, or similar)" | Screening gap |
-| 4 | "Have you received an HPV vaccine?" | HPV risk mitigation |
-| 5 | "Do you smoke, or have you smoked in the past?" | Lifestyle risk |
-| 6 | "Where do you currently live? (Country, State)" | Scheme eligibility + clinic proximity |
-| 7 | "Have you noticed any symptoms recently — like unusual discharge, lumps, or persistent pain?" | Urgency flag (not diagnostic) |
-| 8 | "What language would you like VERA to speak with you?" | Multilingual routing |
+**Initial Profiling Mode** — triggered when a session is new.
+- Agent 1 generates up to 6 contextual questions using Gemini, one at a time
+- Each question is informed by: gender, age_group, BMI, location, and prior answers
+- Questions always cover: family history, existing conditions, lifestyle (smoking/alcohol), screening history, optional symptoms
 
-### Conversation Design
-- Questions asked one at a time, conversationally
-- Gemini manages the conversation flow — responses can trigger follow-ups
-- No clinical jargon in questions
-- Empathetic framing: "VERA is here to understand you, not to judge"
+**Reconcile Mode** — triggered when `risk_assessment.pending_signals` is non-empty and `reconciled = False`.
+- Agent 1 reads the existing score and all pending signals from Agent 3
+- Compares original profile-based score against new clinical evidence
+- Produces one of three verdicts: Agreement, Escalation (conflict), or Uncertainty (conflict)
 
-### Risk Scoring Logic
+### Question Generation
 
-MedGemma (medgemma-4b-it) receives the structured patient profile and returns a scored assessment as JSON:
+Gemini receives: gender, age_group, BMI, location, previous answers
+Returns structured JSON per question:
+```json
+{
+  "id": "q3",
+  "question": "Have you had a colonoscopy in the last 5 years?",
+  "type": "choice",
+  "key": "colonoscopy_history",
+  "options": [
+    {"value": "yes", "label": "Yes"},
+    {"value": "no", "label": "No"},
+    {"value": "not_sure", "label": "Not sure"}
+  ],
+  "why_we_ask": "Colonoscopy history affects colorectal cancer risk scoring."
+}
+```
 
+### Risk Scoring
+
+Gemini Flash receives the full structured profile and returns:
 ```json
 {
   "risk_level": "High",
   "risk_score": 8,
-  "cancer_types_flagged": ["cervical", "breast"],
-  "screening_gap_years": 5,
-  "reasoning": "One sentence clinical reasoning based on the profile.",
-  "recommendations": "One sentence on the most important next step."
+  "cancer_types_flagged": ["colorectal"],
+  "screening_gap_years": 6,
+  "plain_language_summary": "I rated your risk as high because of your family history of colorectal cancer and the fact that you have not had a colonoscopy in over 5 years.",
+  "disclaimer": "This is not a medical diagnosis. VERA provides risk awareness only."
 }
 ```
 
-Score ranges: Low (0–3) · Moderate (4–6) · High (7–9) · Urgent (10+)
+Falls back to rule-based scoring if Gemini is unavailable.
 
-Falls back to deterministic rule-based scoring if MedGemma is unavailable — demo never crashes.
+### Reconcile Output
 
-### Output Schema
+```python
+# Verdict A — Agreement
+{"final_score": "medium", "conflict": False, "reasoning": "Lab findings are consistent with your profile."}
 
-```json
-{
-  "risk_level": "Moderate",
-  "risk_score": 6,
-  "cancer_types_flagged": ["cervical", "breast"],
-  "screening_gap_years": 4,
-  "timeline": [
-    {"year": 2020, "event": "Last known screening", "status": "completed"},
-    {"year": 2022, "event": "Recommended Pap smear", "status": "missed"},
-    {"year": 2024, "event": "Recommended mammogram", "status": "missed"},
-    {"year": 2026, "event": "Now — VERA recommends immediate action", "status": "urgent"}
-  ],
-  "plain_language_summary": "Based on what you've shared, your cervical cancer risk is moderate. You haven't had a screening in about 4 years, which is longer than recommended. The good news: this is completely fixable.",
-  "disclaimer": "This is not a medical diagnosis. VERA provides risk awareness only. Please consult a qualified doctor."
-}
+# Verdict B — Escalation (triggers conflict card)
+{"final_score": "high", "conflict": True, "reasoning": "Your report shows findings that indicate higher risk than your initial profile suggested."}
+
+# Verdict C — Uncertainty
+{"final_score": "medium", "conflict": True, "uncertain": True, "reasoning": "Your report contains mixed signals. I recommend a follow-up with a specialist."}
 ```
 
-### Models Used
-- **Gemini 2.0 Flash**: Conversation management, question sequencing, plain-language summary generation
-- **MedGemma (medgemma-4b-it)**: Medical risk scoring — structured JSON output with risk level, cancer types, screening gap, and clinical reasoning
+### Models
+- **Gemini 2.5 Flash** — question generation, risk scoring, reconciliation, plain-language summary
 
 ---
 
-## Agent 2: Scheme Navigator
+## Agent 2: Care Navigator
 
 ### Purpose
-Remove the cost and awareness barriers in one step. Show her that free help exists, and where to go.
+Based on the risk score and location from Agent 1, find the nearest actionable next step: government scheme, specialist, and screening facility.
 
 ### Matching Logic
 
 ```
-User location (state/district)
-    + Risk level
-    + Income signal (optional)
-        ↓
-Match against scheme database
-        ↓
-Filter clinics by:
-  - Distance from user
-  - Female doctor availability
-  - Free or subsidized cost
-  - Active screening camps
-        ↓
-Return top 3 clinics + all matched schemes
+Risk level + user location + cancer types flagged
+    ↓
+Vector similarity search in scheme_data (pgvector)
+    ↓
+Gemini summarizes eligibility in plain language
+    ↓
+Return: matched schemes + specialist type + nearest clinics
 ```
 
-### Scheme Data
+### Government Schemes (mocked via RAG in pgvector)
 
-Schemes and clinics are determined dynamically by Gemini based on the user's location (state + country). No real government APIs are called — this is a deliberate hackathon decision. Gemini is prompted to identify relevant national programmes (e.g. Ayushman Bharat PM-JAY, NCSP, NHS) and reputable free screening hospitals for the given location, returning structured JSON. Full fallback data is hardcoded for demo stability.
+| Country | Scheme |
+|---------|--------|
+| India | Ayushman Bharat (PM-JAY) |
+| Egypt | NHIA (National Health Insurance Authority) |
+| UK | NHS free cancer screening programmes |
 
-### Clinic Data Schema
+No real government APIs are called. All data is synthetic JSON embedded with pgvector for similarity search. This is a deliberate hackathon decision.
 
-```json
-{
-  "clinic_name": "AIIMS Delhi Cancer Screening Camp",
-  "distance_km": 4.2,
-  "address": "Ansari Nagar, New Delhi",
-  "female_doctor_available": true,
-  "cost": "Free",
-  "next_camp_date": "2026-05-18",
-  "contact": "+91-11-26588500",
-  "appointment_url": null,
-  "services": ["Pap smear", "Mammogram", "Breast examination"]
-}
-```
+### Specialist Routing
 
-### Output
-- Scheme cards (matched, with eligibility plain-language)
-- Clinic tiles (3 nearest, sorted by distance)
-- CTA: "Book Now" / "Call to Schedule" / "Walk-in Available"
+| Signal | Specialist |
+|--------|-----------|
+| Colorectal / bowel symptoms | Gastroenterologist |
+| Breast / gynaecologic | Gynaecologic Oncologist |
+| Lung / smoking history | Pulmonologist |
+| Skin changes | Dermatologist |
+| General / unclear | Oncologist |
 
-### Models Used
-- **Gemini 2.0 Flash**: Location-aware scheme research, clinic identification, eligibility summarization in user's language, and "why this matches you" personalisation
+### Models
+- **Gemini 2.5 Flash** — scheme description summarization, eligibility matching, plain-language output
+- **Embedding model** — `models/embedding-001` (768-dimensional, v1beta compatible) for pgvector similarity search
 
 ---
 
-## Agent 3: Education Agent
+## Agent 3: Records Explainer
 
 ### Purpose
-Replace fear of the unknown with understanding. Show her exactly what a screening involves — before she walks in.
+Read uploaded medical documents (PDF, JPG, PNG) and produce dual output: a plain-language explanation for the user, and structured clinical signals for Agent 1.
 
-### Content Library
+### Dual Output
 
-| Topic | Duration | Languages |
-|-------|----------|-----------|
-| BSE (Breast Self-Examination) guide | 60s | EN, HI, TA |
-| Pap smear: what to expect | 75s | EN, HI, TA |
-| Mammogram: the procedure | 60s | EN, HI, TA |
-| Why early detection saves lives | 45s | EN, HI, TA |
-| After your screening: next steps | 45s | EN, HI, TA |
+**Output 1 — User-facing explanation**
+- Plain language, no jargon
+- Flags anything urgent calmly
+- Ends with: "This is a plain-language explanation only. Please discuss findings with your doctor."
+- No em dashes
 
-### Personalization Logic
-
-```
-Risk profile: cervical risk flagged, Hindi language
-    ↓
-Select: Pap smear video + "Why early detection" video
-    ↓
-Gemini generates personalized intro: 
-  "Priya, because your risk profile shows cervical concern,
-   here's exactly what a Pap smear involves..."
-    ↓
-Assemble: personalized intro text + video segment
-    ↓
-Output: video player + text summary below
-```
-
-### Implementation — Demo Strategy
-For the hackathon demo, pre-render or source 2–3 short animated video segments. Gemini generates the personalized script overlay/narration. Full generative video pipeline is a post-hackathon feature.
-
-### Output Schema
-
+**Output 2 — Clinical signals JSON**
 ```json
 {
-  "video_url": "/education/pap-smear-hindi.mp4",
-  "personalized_intro": "Priya, based on your profile...",
-  "text_summary": "A Pap smear takes about 5 minutes...",
-  "language": "Hindi",
-  "cancer_type": "cervical",
-  "follow_up_prompt": "Would you like to see what to expect after your screening?"
+  "anomalies": ["12mm tubulovillous adenoma, ascending colon, not fully resected"],
+  "severity": "high",
+  "confidence": 0.91,
+  "specialist_signal": "Gastroenterologist",
+  "urgency_flag": true
 }
 ```
 
-### Models Used
-- **Gemini**: Personalized script generation, translation, intro/outro narration text
-- **No Featherless needed here** (content generation, not medical reasoning)
+After extraction, Agent 3:
+1. Appends signals to `risk_assessment.pending_signals`
+2. Sets `risk_assessment.reconciled = False`
+3. Router sees pending signals and routes to Agent 1 reconciler
+
+### Privacy
+Files are read from bytes in memory. Never written to disk. Never stored after response.
+
+```python
+# Privacy pattern shown to judges
+content: bytes = await file.read()
+# ... process in memory ...
+# file bytes go out of scope — no disk write, no storage
+```
+
+### Models
+- **Gemini 2.5 Pro** — document analysis, clinical signal extraction, multimodal (PDF, JPG, PNG)
 
 ---
 
-## Agent 4: Companion Agent
+## Agent 4: Companion
 
 ### Purpose
-Be the persistent, warm presence that follows up — so no woman falls through the cracks after her first VERA interaction.
+Proactive health companionship. VERA reaches out — users do not have to remember to come back. Also powers the `/chat` page for report Q&A.
 
-### Memory Design
+### Endpoints
 
-```
-Session created → profile stored with session_id
-User returns → session_id cookie → profile loaded
-Gemini receives: "User is Priya, last session May 12, 
-  risk was Moderate, she hadn't booked a clinic yet.
-  Greet her warmly and ask how the appointment went."
-```
+**`POST /companion/chat`** — Real-time Q&A based on the user's uploaded records and risk profile. Gemini Flash receives the full session context (records explanation, risk score, risk reasoning) and responds to the user's specific question.
 
-### Follow-Up Plan Generation
+**`POST /companion/followup`** — Generates a structured follow-up plan: next action, specialist referral, scheme to use, reminder schedule.
 
-Input: full session context
-Output:
-```
-Your VERA Follow-Up Plan
-─────────────────────────
-✓ This week: Call AIIMS Delhi to confirm your free Pap smear
-  📞 +91-11-26588500 | Ask for: free screening camp
+**`POST /companion/checkin`** — Demo endpoint: simulates a proactive 3-days-later check-in from VERA. Triggered by "Simulate 3 Days Later" button in the UI.
 
-✓ May 18: Your screening camp date at AIIMS Delhi
+### Memory
+Check-in conversations are stored in `checkin_memory` table with pgvector embeddings (768-dimensional). Used to personalise future messages.
 
-✓ June 12: VERA check-in — How did it go?
-
-✓ Yearly: Set a reminder each May for your annual cervical screening
-```
-
-### Family Message Draft
-
-Gemini generates a warm, non-clinical, culturally appropriate message:
-
-```
-English version:
-"Hi [Name], I've been reading up on women's health and found 
-out I'm overdue for a routine check-up. I've made an appointment 
-at [Clinic] on [Date] — completely free through a government program. 
-Just wanted to let you know. Would love your company if you're free. 💙"
-
-Tamil version:
-[Gemini generates culturally appropriate Tamil equivalent]
-
-Hindi version:
-[Gemini generates culturally appropriate Hindi equivalent]
-```
-
-### Multilingual Support
-
-| Language | Script | Greeting |
-|----------|--------|---------|
-| English | Latin | "Hi, I'm VERA. I'm here to help you understand your health." |
-| Hindi | Devanagari | "नमस्ते, मैं VERA हूँ।" |
-| Tamil | Tamil | "வணக்கம், நான் VERA." |
-
-Language detection: user preference from Risk Profiler Q8. Gemini handles translation.
-
-### Output Schema
-
-```json
-{
-  "greeting": "Welcome back, Priya. Last time we spoke, you were planning to book your screening.",
-  "follow_up_plan": [...],
-  "family_message_drafts": {
-    "english": "...",
-    "hindi": "...",
-    "tamil": "..."
-  },
-  "reminder_schedule": [
-    {"date": "2026-05-18", "message": "Your screening camp today at AIIMS Delhi"},
-    {"date": "2026-06-12", "message": "VERA check-in: How did your appointment go?"}
-  ]
-}
-```
-
-### Models Used
-- **Gemini**: All output generation — greeting, follow-up plan, message drafts, multilingual translation
-- Memory managed in backend session store, not within the model itself
+### Models
+- **Gemini 2.5 Flash** — all companion output: chat replies, follow-up plans, check-in messages
 
 ---
 
-## Inter-Agent Communication
+## The Collaboration Mechanic — Conflict Detection
 
-All agents communicate via the orchestration backend. No direct agent-to-agent calls.
+This is the centrepiece of VERA's multi-agent architecture.
 
 ```
-Frontend → POST /risk/score
-Backend  → RiskProfiler.run(session) → returns risk_output
-Backend  → SchemeNavigator.run(session, risk_output) → returns schemes
-Backend  → EducationAgent.run(session, risk_output) → returns video
-Backend  → CompanionAgent.run(session, all_outputs) → returns follow_up
-Frontend ← Full session response (streamed or batched)
+1. Agent 1 scores MEDIUM from profile alone
+        ↓
+2. User uploads colonoscopy report
+        ↓
+3. Agent 3 reads report: anomalies found, severity=HIGH
+   → writes to pending_signals, sets reconciled=False
+        ↓
+4. Router sees pending_signals → Agent 1 (reconcile mode)
+        ↓
+5. Agent 1 compares: original=MEDIUM vs signal=HIGH
+   → CONFLICT DETECTED
+   → writes: score=high, conflict={original, new, reason}
+        ↓
+6. Conflict card shown to user:
+   "I've updated your assessment from Medium to High based on your report."
+        ↓
+7. Agent 2 activates with HIGH risk
+   → Gastroenterologist + urgent scheme
 ```
 
-Session object is the shared context bus passed through each agent.
+No agent overwrites `score` except Agent 1. This is enforced by design, not by runtime checks.
+
+---
+
+## Shared Risk Assessment Object
+
+```python
+risk_assessment = {
+    "score": "low" | "medium" | "high",   # Agent 1 owns this
+    "confidence": 0.0-1.0,
+    "reasoning": str,                      # plain-language explanation
+    "source": "profile_only" | "profile+records",
+    "pending_signals": [],                 # Agent 3 writes here only
+    "reconciled": bool,
+    "conflict": None | {
+        "original_score": str,
+        "new_score": str,
+        "reason": str,
+        "shown_to_user": bool
+    }
+}
+```

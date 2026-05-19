@@ -1,11 +1,16 @@
-{$DOMAIN} {
-    # Backend API
-    handle /api/* {
-        uri strip_prefix /api
+{
+    auto_https off
+}
+
+:80 {
+    handle_path /api/* {
         reverse_proxy backend:8000
     }
 
-    # Frontend
+    handle /openapi.json {
+        reverse_proxy backend:8000
+    }
+
     handle {
         reverse_proxy frontend:3000
     }

@@ -1,202 +1,185 @@
 # DEMO — VERA Live Demo Script
 
 ## Event Details
-- **Date**: May 20, 2026
-- **Venue**: Milan AI Week, Milan, Italy
-- **Format**: 7-minute live demo + Q&A
-- **Platform**: lablab.ai AI Agent Olympics
 
-## The Persona: Priya
-
-For the demo, we use a consistent persona:
-
-> **Priya**, 38, from Delhi. Has not had a cancer screening in 5 years.
-> Family history: mother had breast cancer. No HPV vaccine.
-> Speaks Hindi and English. Doesn't know about free government schemes.
-
-Pre-load this session before the demo. The Companion Agent will "remember" her on second visit.
+| Field | Value |
+|-------|-------|
+| Date | May 20, 2026 |
+| Venue | Milan AI Week, Milan, Italy |
+| Format | 7-minute live demo + Q&A |
+| Platform | lablab.ai AI Agent Olympics |
 
 ---
 
-## 7-Minute Demo Script
+## The Demo Persona: Arjun
 
-### [0:00 – 1:00] Opening + Problem (60 seconds)
+> **Arjun**, 45-54, male, smoker, family history of colorectal cancer, Mumbai.
+> No colonoscopy in over 5 years.
+> Initial risk: MEDIUM from profile alone.
+> Uploads colonoscopy report with abnormal polyp finding.
+> Conflict fires — score escalates from MEDIUM to HIGH.
+> Agent 2 routes to Gastroenterologist + Ayushman Bharat.
 
-**Presenter says**:
-
-> "600 million women worldwide skip cancer screenings every year. Not because they don't care — but because nobody gave them the truth about their risk, in their language, at the right moment. We built VERA. Vital Early Risk Advisor. Because Vera means truth. And every woman deserves the truth about her own health — before it's too late."
-
-**On screen**: VERA landing page loads. Clean, warm design. Tagline visible.
-
-**Click**: "Start with VERA"
-
----
-
-### [1:00 – 2:00] Risk Profiler — The Conversation (60 seconds)
-
-**VERA asks** (on screen, conversational UI):
-- "Hi, I'm VERA. What's your name?" → Priya
-- "How old are you, Priya?" → 38
-- "When did you last have a cancer screening?" → "About 5 years ago"
-- "Any family history of cancer?" → "Yes, my mother had breast cancer"
-
-**Presenter says**: "VERA isn't a form. She's a conversation. She asks only what matters."
-
-Speed through remaining questions (HPV: No, Location: Delhi, Symptoms: None, Language: Hindi).
+This is the primary demo persona. It demonstrates the conflict detection mechanic — the centrepiece of VERA's collaborative agent architecture.
 
 ---
 
-### [2:00 – 2:30] Risk Score + Visual Timeline (30 seconds)
+## 7-Minute Demo Flow
 
-**On screen**: Risk profile card appears.
+### [0:00 to 0:30] Landing page
 
-```
-PRIYA'S RISK PROFILE
-━━━━━━━━━━━━━━━━━━━
-Risk Level: HIGH
-Cervical ●●●●○  Breast ●●●●●
+**On screen**: VERA landing page. Clean, warm design. "Start Your Assessment" button visible.
 
-Screening Timeline:
-2021 ──●── Missed Pap smear
-2023 ──●── Missed mammogram  
-2026 ──★── NOW — Action needed
-```
+**Presenter says**: "600 million people skip cancer screenings every year. Not because they do not care — but because no one gave them the right information, at the right moment. We built VERA."
 
-**Presenter says**: "In 60 seconds, VERA has mapped 5 years of missed screenings and flagged elevated risk for both cervical and breast cancer. She does this without a single medical test."
+**Click**: "Start Your Assessment"
 
 ---
 
-### [3:00 – 4:00] Scheme Navigator (60 seconds)
+### [0:30 to 1:00] Signup
 
-**On screen**: Scheme cards appear.
+**On screen**: Signup form — Name, Date of Birth, Gender, Location, Height, Weight.
 
-> "Priya, you qualify for free cancer screening under Ayushman Bharat. Here are 3 free screening clinics near you in Delhi."
+Fill in Arjun's details. DOB auto-computes age group. Height + weight auto-computes BMI.
 
-```
-✓ AIIMS Delhi — 4.2km
-  Free Pap smear + mammogram
-  Female doctor: Available
-  Next camp: May 18, 2026
+**Presenter says**: "No account. No password. Just the basics — and VERA gets to work."
 
-✓ Safdarjung Hospital — 6.8km
-  Free screening camp
-  Female doctor: Available
-  Walk-in: Monday–Friday
-
-✓ Lady Hardinge Medical — 8.1km
-  Free cervical screening
-  Female doctor: Specialist
-  Appointment: Call +91-11-...
-```
-
-**Presenter says**: "VERA doesn't just tell Priya she's at risk. She tells her exactly where to go — for free — with a female doctor available. She removes every barrier."
+**Click**: "Continue to Assessment"
 
 ---
 
-### [4:00 – 5:30] Education Agent — Animated Video (90 seconds)
+### [1:00 to 2:00] Assessment — AI-generated adaptive questions
 
-**On screen**: Personalized intro text appears in Hindi, then video plays.
+**On screen**: Card-based assessment, one question at a time. Progress bar: Step 1 of 6.
 
-> "Priya, because your profile shows elevated cervical risk, here's exactly what a Pap smear involves — so there are no surprises."
+Gemini generates each question based on Arjun's profile: gender, age, BMI, location, prior answers.
 
-**[60-second animated video plays]**:
-- What a Pap smear is (animation, no live camera)
-- What to expect: before, during, after
-- "It takes 5 minutes. It can save your life."
+Questions cover: family history of colorectal cancer (yes), smoking (yes), screening history (no colonoscopy in 5+ years), existing conditions, optional symptoms.
 
-**Presenter says** (while video plays): "Education is how VERA removes fear. Not a generic YouTube video — a personalized explanation matched to her exact risk profile, in her language."
-
-After video: text summary shown below for accessibility.
+**Presenter says**: "These questions are not a static form. VERA generates each one based on what Arjun has already told her. A 54-year-old male smoker gets different questions than a 30-year-old woman."
 
 ---
 
-### [5:30 – 6:00] Companion Memory (30 seconds)
+### [2:00 to 2:30] Risk profile — MEDIUM
 
-**Presenter says**: "Now let's come back as Priya — one month later."
+**On screen**: Risk result page. MEDIUM risk. Plain-language reasoning visible.
 
-**Action**: Open new browser tab, navigate to VERA. Session loads.
+> "I rated your risk as medium because of your family history of colorectal cancer and the fact that you have not had a colonoscopy in over 5 years."
 
-**On screen**:
-
-> "Welcome back, Priya. It's been 4 weeks since we last spoke. Last time, you were planning to book your screening at AIIMS Delhi. Did you get a chance to go?"
-
-**Presenter says**: "VERA remembers. She's not starting over. She's following up — like a trusted friend would."
+**Presenter says**: "VERA explains why — not just what. The reasoning is plain language, not medical jargon."
 
 ---
 
-### [6:00 – 6:30] Family Message Draft (30 seconds)
+### [2:30 to 3:30] Agent 2 — Care navigation
 
-**On screen**: Follow-up plan appears, then family message draft:
+**On screen**: Government scheme card (Ayushman Bharat). Specialist recommendation: Gastroenterologist. Nearby screening facilities.
 
-```
-Your message to share with your family:
-
-"Hi, I've been taking charge of my health lately. 
-I found out I'm overdue for a routine check-up 
-and booked a free appointment at AIIMS Delhi on 
-May 18th. Just wanted to let you know — would 
-love your company if you're free. 💙"
-
-[Copy in Hindi] [Copy in English] [Copy in Tamil]
-```
-
-**Presenter says**: "Stigma is one of the biggest barriers. VERA drafts a message Priya can send to her family — framing her appointment as routine self-care, not a cause for alarm."
+**Presenter says**: "Agent 2 immediately activates. Arjun does not know about Ayushman Bharat. VERA finds it for him, explains his eligibility, and shows him where to go — for free."
 
 ---
 
-### [6:30 – 7:00] Close (30 seconds)
+### [3:30 to 4:30] Agent 3 — Upload colonoscopy report
 
-**Presenter says**:
+**On screen**: Records page. Arjun uploads his colonoscopy PDF.
 
-> "VERA is four agents working as one. A risk profiler that sees her. A navigator that removes cost barriers. An educator that removes fear. And a companion that never lets her fall through the cracks. This is what AI looks like when it's built for the 600 million women the world has been ignoring."
+**On screen**: Agent 3 processes the file. Plain-language explanation appears:
 
-**On screen**: VERA home screen. Partner logos visible. Team slide.
+> "Your colonoscopy report shows an abnormal polyp in the ascending colon. The polyp was not fully removed during the procedure and requires a follow-up resection..."
+
+**Presenter says**: "Agent 3 reads the report and explains it in plain language. No jargon. But here is where it gets interesting."
+
+---
+
+### [4:30 to 5:00] Conflict card fires
+
+**On screen**: Conflict card appears — visually distinct, different colour.
+
+> "I have updated your risk assessment. Your profile initially pointed to Medium risk. But your colonoscopy report has changed that picture. I now consider your risk to be High. Here is why: your report found an abnormal polyp that was not fully removed and requires urgent follow-up."
+
+**Presenter says**: "This is the collaboration mechanic. Agent 3 extracted clinical signals and wrote them to the shared state. Agent 1 ran in reconcile mode, compared the original score to the new evidence, detected a conflict, and updated the score. The agents are checking each other's conclusions."
+
+---
+
+### [5:00 to 5:30] Updated care plan — HIGH risk
+
+**On screen**: Agent 2 re-activates with HIGH risk. Gastroenterologist shown as urgent referral. Ayushman Bharat scheme highlighted for the specialist visit.
+
+**Presenter says**: "Agent 2 now recalculates for HIGH risk. The same scheme — but now framed as an urgent specialist referral, not routine screening."
+
+---
+
+### [5:30 to 6:00] Companion check-in
+
+**On screen**: "Simulate 3 Days Later" button. Click it.
+
+> "Hi Arjun, it has been a few days since your VERA assessment. You had planned to book with a gastroenterologist. Have you had a chance to take that step? I am here if you need help finding the right clinic."
+
+**Presenter says**: "VERA does not wait for Arjun to come back. She reaches out. This is Agent 4 — the Companion. It fires proactively, personalised to his specific next step."
+
+---
+
+### [6:00 to 6:30] Chat — Q&A about the report
+
+**On screen**: Chat page. Arjun asks: "What does this mean for me?"
+
+VERA responds based on the actual colonoscopy report — not a static answer.
+
+**Presenter says**: "Arjun can ask anything about his report. VERA answers using the actual document context — not a generic response."
+
+---
+
+### [6:30 to 7:00] Close
+
+**Presenter says**: "Four agents working as one. A risk profiler that adapts to each person. A navigator that removes cost barriers. A records explainer that surfaces hidden risk. And a companion that never lets anyone fall through the cracks. This is VERA."
 
 ---
 
 ## Demo Preparation Checklist
 
-**48 hours before**:
-- [ ] Deploy backend to Vultr, confirm uptime
-- [ ] Pre-load "Priya" session in production database
-- [ ] Test full 7-minute flow end-to-end (3x)
-- [ ] Confirm API key active (Gemini + MedGemma — single GEMINI_API_KEY via Google AI Studio)
-- [ ] Confirm video files load on production URL
-- [ ] Test on the demo machine / laptop
+**48 hours before:**
+- [ ] Vultr deployment confirmed live at `http://<vultr-ip>`
+- [ ] Test full flow end-to-end (3x) with Arjun persona
+- [ ] GEMINI_API_KEY confirmed active with gemini-2.5-flash and gemini-2.5-pro
+- [ ] Conflict card fires correctly after colonoscopy upload
+- [ ] Chat page loads real report context, not static demo text
+- [ ] "Simulate 3 Days Later" check-in fires correctly
+- [ ] Browser tabs pre-opened: landing, assessment, risk, records, chat
 
-**Day of demo**:
-- [ ] Hardcoded fallback data confirmed active
-- [ ] Browser tabs pre-opened at correct URLs
-- [ ] Font size increased for projector visibility
-- [ ] Backup: screen recording of full demo flow ready
-- [ ] Mobile hotspot ready (do not rely on venue WiFi)
+**Day of demo:**
+- [ ] Font size increased for projector
+- [ ] Screen recording backup of full flow ready
+- [ ] Mobile hotspot ready — do not rely on venue WiFi
+
+---
 
 ## Fallback Plan
 
-If the live demo fails mid-way:
-1. Switch to pre-recorded screen recording (always have this)
-2. Continue narrating over the recording — judges care about the story
-3. "We're showing you a recording to save time, the live version is at [URL]"
+If live demo fails mid-way: switch to pre-recorded screen recording. Continue narrating over it.
 
-If a specific agent fails:
-- **Risk Profiler fails**: Show hardcoded Priya risk card, continue
-- **Scheme Navigator fails**: Show hardcoded clinic cards, continue
-- **Video fails**: Show text summary, say "the video is personalized to her risk — here's the transcript"
-- **Companion memory fails**: Manually trigger the "welcome back" state
+| Agent fails | Fallback |
+|-------------|---------|
+| Risk Profiler | Show hardcoded MEDIUM risk card, continue |
+| Care Navigator | Show hardcoded scheme + clinic cards, continue |
+| Records upload | Show static explanation text, describe the dual-output mechanic |
+| Conflict card | Describe the mechanic verbally, show the conflict card screenshot |
+| Companion check-in | Read the check-in message text directly |
+| Chat | Show static Q&A, explain that real mode uses session context |
 
-## Q&A Prep — Expected Questions
+---
+
+## Q&A Prep
 
 **"Is this FDA approved?"**
-> "VERA is an awareness and navigation tool, not a diagnostic tool. We don't replace doctors — we get women to doctors."
+> "VERA is an awareness and navigation tool, not a diagnostic tool. We do not replace doctors — we get people to the right doctor faster."
 
 **"What about data privacy?"**
-> "We store only what's needed for follow-up. No PII sold or shared. GDPR-aligned by design."
+> "Health records are processed in memory only. Files are never written to disk, never stored after the response. We show judges the try/finally code pattern explicitly."
 
-**"How do you handle misinformation risk?"**
-> "Every risk output carries a disclaimer. VERA uses MedGemma — Google's medical AI model trained on clinical literature — for risk calibration, and all scheme data is sourced from known government programmes. VERA never diagnoses; it navigates."
+**"How do you handle wrong risk scores?"**
+> "That is exactly what the conflict detection mechanic addresses. If a user uploads a document that contradicts their initial score, Agent 1 reconciles both sources of evidence and surfaces the conflict to the user with a plain-language explanation."
 
 **"How do you scale beyond India?"**
-> "The agent architecture is country-agnostic. Scheme data is the only country-specific layer. We can add NHS, Medicare equivalents in days."
+> "The architecture is country-agnostic. Scheme data is the only country-specific layer — it is seeded in pgvector. Adding NHS or Medicare equivalents is a data operation, not a code change."
 
-**"Why MedGemma for risk assessment?"**
-> "Medical domain specialisation. MedGemma is Google's purpose-built medical AI model trained on clinical literature — it produces structured risk assessments with clinical reasoning that a general-purpose model cannot reliably replicate. Gemini handles conversation and language. They're complementary and both accessed through the same Google AI Studio API key."
+**"Why not just one big LLM?"**
+> "Separation of concerns. Each agent has a different capability requirement. Agent 1 needs structured risk scoring. Agent 3 needs multimodal document reading with Gemini Pro. Agent 2 needs RAG over a scheme database. One model doing all of this is less reliable and harder to debug in a live demo."

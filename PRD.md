@@ -2,149 +2,171 @@
 
 ## Problem Statement
 
-600 million women worldwide skip cancer screenings every year. In India alone, 70% of cervical cancer cases are detected at Stage 3 or 4 — when survival odds drop sharply. The barriers are not medical. They are informational, social, financial, and systemic:
+Hundreds of millions of people worldwide skip cancer screenings every year. In India, 70% of cervical cancer cases are detected at Stage 3 or 4 — when survival odds drop sharply. The barriers are not medical. They are informational, social, financial, and systemic:
 
-- No personalized understanding of their own risk
-- Stigma and lack of family support
+- No personalised understanding of their own risk
 - Unawareness of free government schemes
-- No guidance in their own language
-- No one following up
+- No guidance on which specialist to see
+- No one following up after a screening recommendation
+- Medical documents explained in jargon instead of plain language
 
-VERA is the AI companion that closes this gap.
+VERA is the AI companion that closes this gap — for everyone.
 
 ## Target Users
 
-**Primary**: Women aged 25–60 in India and globally, with limited prior cancer screening history.
+**VERA is for everyone.** Any age, any gender, any location. Cancer risk is universal.
 
-**Secondary**: Women who have had one screening but dropped off — VERA re-engages them.
+**Primary**: Adults aged 25 to 65 with no recent cancer screening history or with uploaded medical documents they need explained.
 
-**Out of scope (v1)**: Men, post-diagnosis support, clinical decision support for providers.
+**Secondary**: People who received a risk score and need help navigating next steps (specialist, scheme, care plan).
+
+**Out of scope (demo)**: Post-diagnosis clinical support, real-time appointment booking, live camera.
+
+---
 
 ## User Journey
 
 ```
-Woman opens VERA
+User opens VERA
         ↓
-Companion Agent greets her (in her language)
+Signup: Name, DOB, Gender, Location, Height, Weight
+(Frontend computes age_group from DOB, BMI from height+weight)
         ↓
-Risk Profiler asks 8 conversational questions
+Agent 1 — Initial Assessment
+AI-generated adaptive questions (up to 6, one at a time, card UI)
+Risk scored: Low / Medium / High
+Plain-language reasoning shown
         ↓
-Risk score + visual timeline generated
+Agent 2 — Care Navigation
+Government scheme matched (Ayushman Bharat, NHS, NHIA)
+Specialist type identified
+Nearest facilities shown
         ↓
-Scheme Navigator matches her to free programs + nearby clinics
+[Optional] User uploads medical document
         ↓
-Education Agent generates personalized animated explainer
+Agent 3 — Records Explainer (dual output)
+  Output 1: Plain-language explanation shown to user
+  Output 2: Clinical signals written to pending_signals
         ↓
-Companion Agent saves her profile, sets follow-up reminders
+Router detects pending_signals → Agent 1 (reconcile mode)
         ↓
-Family message drafted on her behalf
+If conflict detected:
+  Conflict card shown — old score vs new score, plain-language reason
+  Agent 2 re-activates with updated risk
         ↓
-She leaves knowing her risk, her options, and her next step
+Agent 4 — Companion
+  /chat: Q&A about the uploaded document and risk profile
+  /companion/checkin: "Simulate 3 Days Later" proactive check-in
+  /companion/followup: Structured follow-up plan
 ```
+
+---
 
 ## Agent Requirements
 
-### 1. Risk Profiler Agent
+### Agent 1 — Risk Profiler
 
-**Purpose**: Assess personalized cancer risk through natural conversation.
+**Purpose**: Score cancer risk through adaptive AI-generated questions. Also reconcile new clinical evidence from uploaded documents.
 
-**Input**: 8 questions covering:
-- Age
-- Family history of cancer (first-degree relatives)
-- Date of last screening (Pap smear, mammogram, etc.)
-- HPV vaccination status
-- Lifestyle factors (smoking, alcohol, BMI category)
-- Symptoms (if any — not diagnostic, awareness only)
-- Location (country/state)
-- Preferred language
+**Inputs**:
+- Signup profile: name, age_group, gender, location, height_cm, weight_kg, BMI
+- AI-generated question answers: family history, conditions, lifestyle, screening history, symptoms
+- Pending signals from Agent 3 (reconcile mode only)
 
-**Output**:
-- Cancer risk score (Low / Moderate / High / Urgent) for cervical, breast, ovarian
-- Visual screening timeline showing missed windows
-- Plain-language explanation of what the score means
-- Disclaimer: not a diagnosis, see a doctor
+**Outputs**:
+- Risk level: `low` | `medium` | `high`
+- Plain-language reasoning (why VERA gave that score)
+- Visual screening timeline
+- In reconcile mode: conflict verdict (Agreement / Escalation / Uncertainty)
 
-**Models**: Gemini (conversation, reasoning) + MedGemma (medgemma-4b-it, medical risk calibration)
+**Question types**: `choice` (auto-advance on click), `text` (textarea + Skip)
+
+**Models**: Gemini 2.5 Flash
 
 **Acceptance criteria**:
-- Completes in under 90 seconds of user time
-- Never uses clinical jargon without plain-language explanation
-- Always shows disclaimer before displaying risk level
+- Questions are contextual to gender, age, BMI, location, prior answers
+- Risk output always includes plain-language reasoning
+- Reconciler produces correct conflict verdict when signals contradict profile score
 
 ---
 
-### 2. Scheme Navigator Agent
+### Agent 2 — Care Navigator
 
-**Purpose**: Match the user to real, actionable government health programs and nearby free screening facilities.
+**Purpose**: Match user to a government scheme and a specialist based on risk level and location.
 
-**Input**: User location (state/district), risk profile output, income level (optional)
+**Inputs**: Session ID (reads risk score, cancer types flagged, location from session)
 
-**Output**:
-- List of matched government schemes (India: Ayushman Bharat, state programs; global: country-appropriate equivalents)
-- 3 nearest clinics/hospitals offering free cancer screening
-- For each clinic: distance, female doctor availability, cost, appointment link or phone
-- Sorted by: proximity, then female doctor availability
+**Outputs**:
+- Matched government schemes with plain-language eligibility summary
+- Specialist type with reasoning (Gastroenterologist, Oncologist, Pulmonologist, etc.)
+- Nearest clinics / hospitals (synthetic data from pgvector RAG)
 
-**Data sources**:
-- Synthetic scheme and clinic data (India priority) — mocked, no real government APIs called
-- Gemini for scheme description, eligibility summarization, and "why this matches you" blurbs
-- Location resolved via user input
+**Data**: All scheme and clinic data is synthetic JSON stored in pgvector. No real government APIs are called. This is a deliberate decision.
+
+**Models**: Gemini 2.5 Flash + `models/embedding-001` (pgvector similarity search)
 
 **Acceptance criteria**:
-- Shows at least 1 matched government scheme
-- Shows at least 3 nearby facilities
-- Clearly marks cost as Free vs. Subsidized vs. Paid
-- Female doctor availability flagged prominently
+- Always returns at least one matched scheme
+- Specialist type is specific (not just "see a doctor")
+- Output is location-aware
 
 ---
 
-### 3. Education Agent
+### Agent 3 — Records Explainer
 
-**Purpose**: Generate a personalized animated explainer video that reduces fear and increases understanding.
+**Purpose**: Read uploaded medical documents and produce dual output — plain-language explanation for the user and structured clinical signals for Agent 1.
 
-**Input**: Risk profile, language preference, cancer type(s) flagged in risk score
+**Supported file types**: PDF, JPG, PNG (lab reports, MRI scans, pathology reports, colonoscopy reports)
 
-**Output**:
-- Short animated explainer video (60–90 seconds) covering:
-  - What the screening involves (BSE, Pap smear, mammogram)
-  - What to expect before, during, after
-  - Why early detection matters for her specific risk level
-- Plain-language text summary (same content, accessible without video)
+**Outputs**:
 
-**Constraints**:
-- NO live camera — animated only
-- Personalized to her risk type and language
-- Culturally appropriate visuals
+1. Plain-language explanation:
+   - What the document is
+   - Key findings in plain language
+   - Anything needing attention, stated calmly
+   - What to do next
+   - Disclaimer: "Please discuss findings with your doctor"
 
-**Models**: Gemini (script generation, personalization) + animation pipeline (TBD — static frames or pre-rendered segments for demo)
+2. Clinical signals JSON:
+   ```json
+   {
+     "anomalies": ["specific finding"],
+     "severity": "high" | "medium" | "low",
+     "confidence": 0.0-1.0,
+     "specialist_signal": "Specialist type" | null,
+     "urgency_flag": true | false
+   }
+   ```
+
+**Privacy**: Files processed from bytes in memory. Never written to disk. Never stored after response. Always use try/finally to guarantee cleanup.
+
+**Models**: Gemini 2.5 Pro (multimodal — handles all document types including images)
 
 **Acceptance criteria**:
-- Video plays without errors in demo
-- Content matches the user's risk profile (not generic)
-- Text summary always shown as fallback
+- Plain-language explanation contains no unexplained jargon
+- Clinical signals JSON is valid and specific
+- Signals correctly trigger reconcile flow via pending_signals
 
 ---
 
-### 4. Companion Agent
+### Agent 4 — Companion
 
-**Purpose**: Be VERA's persistent, warm presence — remembering the user across sessions and helping her take the next step.
+**Purpose**: Proactive health companionship. Powers chat, follow-up plans, and proactive check-ins.
 
-**Input**: Full session context from the 3 other agents, language preference, user name (optional)
+**Endpoints**:
 
-**Output**:
-- Personalized follow-up plan (what to do, by when)
-- Screening reminder schedule (configurable: 1 week, 1 month, 3 months)
-- Family message draft — a ready-to-send message to a family member framing the appointment as routine self-care
-- Multilingual support: English, Tamil, Hindi
+- `POST /companion/chat` — Q&A using actual session context (records explanation, risk score, reasoning). Real-time, not static.
+- `POST /companion/followup` — Structured follow-up plan (next action, specialist, scheme, reminder schedule).
+- `POST /companion/checkin` — Simulates a proactive 3-days-later check-in from VERA.
 
-**Memory**: Session data persisted — when user returns, VERA greets her by name and recalls her last interaction.
+**Context used**: records_output (document explanation), risk_assessment (score, reasoning), risk_profile (risk level, plain-language summary), user_name.
 
-**Models**: Gemini (multilingual generation, memory summarization)
+**Models**: Gemini 2.5 Flash
 
 **Acceptance criteria**:
-- Returns user correctly identified on second visit in demo
-- Family message draft is warm, non-clinical, culturally appropriate
-- Follow-up plan is specific (date, action, location)
+- Chat answers are specific to the user's actual uploaded document
+- Check-in message is personalised to the user's next action
+- No em dashes in any output
 
 ---
 
@@ -153,20 +175,36 @@ She leaves knowing her risk, her options, and her next step
 | Requirement | Target |
 |-------------|--------|
 | Demo reliability | 100% — no crashes during 7-minute demo |
-| Response latency | < 3 seconds per agent step |
-| Multilingual | English, Tamil, Hindi |
-| Mobile responsive | Yes — primary access is mobile |
-| Accessibility | High contrast, readable font sizes |
-| Privacy | No PII stored beyond demo session |
+| Response latency | Under 5 seconds per agent step |
+| Accessibility | WCAG 2.1 AA — 44px touch targets, 16px min font, 4.5:1 contrast |
+| Mobile responsive | Yes — primary access may be mobile |
+| Privacy | Health records never stored; processed in memory only |
 | Disclaimers | Shown at every risk output |
+| No em dashes | In any user-facing content |
 
-## Out of Scope (v1 / Hackathon)
+---
 
-- Live doctor consultation
-- Actual appointment booking
-- EHR integration
-- Post-diagnosis support
-- Male health screening
-- Real-time geolocation tracking
-- Native mobile app
-- Actual video rendering pipeline (demo uses pre-rendered segments)
+## Scope Cuts (Do Not Reintroduce)
+
+| Cut | Reason |
+|-----|--------|
+| Authentication | Demo risk; localStorage session sufficient for judges |
+| i18n / multilanguage | next-intl caused Docker build failures; English hardcoded |
+| MedGemma / Featherless | Vertex AI access unavailable; Gemini 2.5 Pro is the replacement |
+| Gemini Vision | Gemini 2.5 Pro handles all document types including images |
+| Real government APIs | Auth/approval impossible in 5 days; RAG mock is sufficient |
+| Celery + Redis | FastAPI BackgroundTasks covers all scheduling needs |
+| LangChain | Raw async Python simpler and more debuggable |
+| Live appointment booking | Hospital APIs in India are fragmented and unreliable |
+| Native mobile app | PWA sufficient for demo; no app store review delay |
+
+---
+
+## Design Principles
+
+1. **No passwords, no jargon, no em dashes.** These three constraints serve the same user: someone anxious about their health who needs to trust VERA immediately.
+2. **VERA speaks in first person.** "I", "I've found", "I'm here." Not a system. A companion.
+3. **Plain language everywhere.** Never use a medical term without a plain-language explanation alongside it.
+4. **WCAG 2.1 AA.** 44px touch targets, 16px minimum body font, visible focus indicators, meaningful alt text.
+5. **Deterministic router.** Never replace with an LLM-based planner. Deterministic equals reliable, low-latency, demo-safe.
+6. **Agent 1 owns score.** No other agent writes to `risk_assessment.score`. This prevents race conditions.
