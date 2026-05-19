@@ -9,7 +9,7 @@ import type { RecordsOutput, ReconcileResult } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 
-const MOCK = true; // set to false to use backend
+const MOCK = false; // set to true to use mock data
 
 const MOCK_OUTPUT: RecordsOutput = {
   explanation: {

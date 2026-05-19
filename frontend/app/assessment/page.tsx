@@ -8,7 +8,7 @@ import type { RiskQuestion } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 
-const MOCK = true; // set to false to use backend
+const MOCK = false; // set to true to use mock data
 
 const TOTAL_STEPS = 6;
 

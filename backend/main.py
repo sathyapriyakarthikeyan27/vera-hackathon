@@ -34,7 +34,6 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url=None,
-    root_path="/api",
 )
 
 _origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -87,6 +86,7 @@ async def create_session_endpoint(body: SessionRequest = SessionRequest()):
 
 
 @app.post("/session/signup", tags=["Session"], status_code=201)
+@app.post("/signup", tags=["Session"], status_code=201, include_in_schema=False)
 async def signup_endpoint(body: SignupRequest):
     """
     Minimal-friction sign-up: creates a session and pre-fills name, age, gender,

@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 
-const MOCK = true; // set to false to use backend
-
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Message = {
@@ -16,85 +14,74 @@ type Message = {
   timestamp: string;
 };
 
-// ── Mock conversation data ────────────────────────────────────────────────────
-
-const MOCK_QA: Record<string, { text: string; chips?: string[] }> = {
-  "What does this mean for me?": {
-    text: "The polyp found in your colon is called a tubulovillous adenoma. Think of it as a small growth with features that can, over time, develop into cancer if left untreated.\n\nThe good news: it was caught before any cancer developed. That is exactly what screening is for. The follow-up procedure will remove the remaining part of the polyp, and regular monitoring will make sure nothing like this develops again.",
-    chips: ["What is the follow-up procedure?", "How do I prepare?", "What questions should I ask?"],
-  },
-  "How serious is this?": {
-    text: "I want to be honest with you. This finding is significant enough to act on promptly, which is why I updated your risk to High. But it is not an emergency.\n\nPolyps like this, caught early and removed, almost never develop into cancer. You are in exactly the right position. The fact that you had the screening is what matters.",
-    chips: ["What happens if I wait?", "How soon should I book?"],
-  },
-  "What happens next?": {
-    text: "Here are your next steps:\n\n1. Book an appointment with a gastroenterologist within the next 2 to 4 weeks.\n2. Bring this report and mention the partial resection.\n3. They will likely schedule a follow-up colonoscopy to remove the remaining polyp tissue.\n\nI have already found specialists near you on the Find Care page.",
-    chips: ["Show me nearby specialists", "What questions should I ask?"],
-  },
-  "What is the follow-up procedure?": {
-    text: "The follow-up is a repeat colonoscopy or completion polypectomy. The doctor removes the remaining polyp tissue using a small instrument passed through the colonoscope.\n\nIt is a day procedure under mild sedation. Most people go home the same day and feel back to normal within 24 hours.",
-    chips: ["Will it hurt?", "How do I prepare?"],
-  },
-  "Will it hurt?": {
-    text: "The procedure is done under sedation, so you will not feel any pain during it. Afterwards, some people notice mild bloating for a few hours, which passes on its own.\n\nYour doctor will give you specific guidance before the procedure.",
-    chips: ["How do I prepare?"],
-  },
-  "How do I prepare?": {
-    text: "Preparation for a colonoscopy typically includes:\n\n- A clear liquid diet the day before\n- A bowel prep drink to clear the colon\n- Stopping certain medications (your doctor will advise)\n- Arranging someone to drive you home\n\nYour gastroenterologist will give you a full preparation guide when you book.",
-    chips: ["What questions should I ask?"],
-  },
-  "What happens if I wait?": {
-    text: "The longer you wait, the more time the remaining polyp tissue has to grow. Tubulovillous adenomas have a higher chance of progressing than simpler types.\n\nI would recommend booking within 4 weeks as the report suggests. The sooner, the better.",
-    chips: ["How soon should I book?", "Show me nearby specialists"],
-  },
-  "How soon should I book?": {
-    text: "The report recommends follow-up within 4 to 6 weeks. I would aim for the earlier end of that window.\n\nOn the Find Care page, I have identified gastroenterologists near you with availability this month.",
-    chips: ["Show me nearby specialists"],
-  },
-  "What questions should I ask?": {
-    text: "Here are the key questions for your gastroenterologist:\n\n1. Was the entire polyp removed, or is additional resection needed?\n2. What type of polyp was it and what does that mean for my risk?\n3. How often should I have follow-up colonoscopies?\n4. Are there lifestyle changes that would reduce my risk?\n5. Should any family members be screened?\n\nWould you like to explore anything else?",
-    chips: ["How soon should I book?", "Show me nearby specialists"],
-  },
-  "Show me nearby specialists": {
-    text: "I have found gastroenterologists near you on the Find Care page. Apollo Hospitals Cancer Centre is 3.2 km away and has availability this month.\n\nYou can view all options including costs and whether a female doctor is available.",
-    chips: [],
-  },
-};
-
-const DEFAULT_RESPONSE = {
-  text: "That is a good question. Based on your colonoscopy report and current risk profile, I would recommend speaking directly with your gastroenterologist about this. They will have the full clinical picture.\n\nIs there anything specific about your report findings I can help clarify?",
-  chips: ["What does this mean for me?", "What happens next?", "What questions should I ask?"],
-};
-
-const INITIAL_VERA_MESSAGE: Message = {
-  id: "vera-welcome",
-  from: "vera",
-  text: "I have reviewed your colonoscopy report. Here is what I found: a 12mm polyp in your ascending colon that was not fully removed during the procedure. The pathology describes it as a tubulovillous adenoma with low-grade dysplasia.\n\nThis does not mean you have cancer. But it does mean you need follow-up with a gastroenterologist within 4 to 6 weeks. I have already updated your risk profile to High.\n\nWhat would you like to know more about?",
-  chips: ["What does this mean for me?", "How serious is this?", "What happens next?"],
-  timestamp: now(),
+type SessionContext = {
+  riskLevel: string;
+  docType: string;
+  docExplanation: string;
+  anomalies: string[];
 };
 
 function now() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// ── Sidebar insights ─────────────────────────────────────────────────────────
-
-const SIDEBAR_FINDINGS = [
-  "12mm polyp, ascending colon",
-  "Not fully resected",
-  "Tubulovillous adenoma, low-grade dysplasia",
-  "Follow-up within 4 to 6 weeks",
-];
+function buildWelcomeMessage(ctx: SessionContext): Message {
+  let text: string;
+  if (ctx.docExplanation) {
+    text = `I have reviewed your ${ctx.docType}. Here is a summary of what it shows:\n\n${ctx.docExplanation}\n\nWhat would you like to know more about?`;
+  } else {
+    text = `Hello. I am here to help you understand your health records and risk profile. Your current risk level is ${ctx.riskLevel}. You can upload a report on the Records page, or ask me anything about your assessment.\n\nWhat would you like to know?`;
+  }
+  return {
+    id: "vera-welcome",
+    from: "vera",
+    text,
+    chips: ["What does this mean for me?", "What happens next?", "What questions should I ask my doctor?"],
+    timestamp: now(),
+  };
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([INITIAL_VERA_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionCtx, setSessionCtx] = useState<SessionContext>({
+    riskLevel: "Unknown",
+    docType: "medical document",
+    docExplanation: "",
+    anomalies: [],
+  });
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load session context and build initial message
+  useEffect(() => {
+    const sid = localStorage.getItem("vera_session_id");
+    if (!sid) {
+      setMessages([buildWelcomeMessage({ riskLevel: "Unknown", docType: "medical document", docExplanation: "", anomalies: [] })]);
+      return;
+    }
+    fetch(`/api/session/${sid}`)
+      .then((r) => r.json())
+      .then((session) => {
+        const records = session.records_output || {};
+        const ra = session.risk_assessment || {};
+        const rp = session.risk_profile || {};
+        const ctx: SessionContext = {
+          riskLevel: ra.score || rp.risk_level || "Unknown",
+          docType: records.document_type || "medical document",
+          docExplanation: records.text || "",
+          anomalies: (ra.pending_signals || []).flatMap((s: { anomalies?: string[] }) => s.anomalies || []),
+        };
+        setSessionCtx(ctx);
+        setMessages([buildWelcomeMessage(ctx)]);
+      })
+      .catch(() => {
+        setMessages([buildWelcomeMessage({ riskLevel: "Unknown", docType: "medical document", docExplanation: "", anomalies: [] })]);
+      });
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -113,26 +100,9 @@ export default function ChatPage() {
     setInput("");
     setIsTyping(true);
 
-    if (MOCK) {
-      const delay = 900 + Math.random() * 600;
-      await new Promise((r) => setTimeout(r, delay));
-      const response = MOCK_QA[text.trim()] ?? DEFAULT_RESPONSE;
-      const veraMsg: Message = {
-        id: `vera-${Date.now()}`,
-        from: "vera",
-        text: response.text,
-        chips: response.chips,
-        timestamp: now(),
-      };
-      setMessages((prev) => [...prev, veraMsg]);
-      setIsTyping(false);
-      return;
-    }
-
-    // real mode: call backend
     try {
       const sid = localStorage.getItem("vera_session_id");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/companion/chat`, {
+      const res = await fetch("/api/companion/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sid, message: text.trim() }),
@@ -182,29 +152,49 @@ export default function ChatPage() {
             </div>
 
             {/* Risk level */}
-            <div className="p-4 bg-error-container/20 rounded-2xl border border-error/20">
+            <div className={`p-4 rounded-2xl border ${sessionCtx.riskLevel.toLowerCase() === "high" ? "bg-error-container/20 border-error/20" : "bg-secondary-container/20 border-secondary/20"}`}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-error" style={{ fontSize: "20px", fontVariationSettings: "'FILL' 1" }} aria-hidden="true">warning</span>
-                <span className="text-label-md font-bold text-error">High Risk</span>
+                <span className={`material-symbols-outlined ${sessionCtx.riskLevel.toLowerCase() === "high" ? "text-error" : "text-secondary"}`} style={{ fontSize: "20px", fontVariationSettings: "'FILL' 1" }} aria-hidden="true">
+                  {sessionCtx.riskLevel.toLowerCase() === "high" ? "warning" : "info"}
+                </span>
+                <span className={`text-label-md font-bold ${sessionCtx.riskLevel.toLowerCase() === "high" ? "text-error" : "text-secondary"}`}>
+                  {sessionCtx.riskLevel} Risk
+                </span>
               </div>
-              <p className="text-label-sm text-on-surface-variant">Updated after colonoscopy report. Follow-up recommended within 4 to 6 weeks.</p>
+              <p className="text-label-sm text-on-surface-variant">
+                {sessionCtx.docExplanation ? `Based on your uploaded ${sessionCtx.docType}.` : "Based on your profile assessment."}
+              </p>
             </div>
 
             {/* Document */}
-            <div className="p-4 bg-surface-container rounded-2xl border border-outline-variant">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="material-symbols-outlined text-primary" style={{ fontSize: "20px" }} aria-hidden="true">description</span>
-                <span className="text-label-md font-bold text-on-surface">Colonoscopy Report</span>
+            {sessionCtx.docExplanation ? (
+              <div className="p-4 bg-surface-container rounded-2xl border border-outline-variant">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-primary" style={{ fontSize: "20px" }} aria-hidden="true">description</span>
+                  <span className="text-label-md font-bold text-on-surface capitalize">{sessionCtx.docType}</span>
+                </div>
+                {sessionCtx.anomalies.length > 0 ? (
+                  <ul className="space-y-2">
+                    {sessionCtx.anomalies.slice(0, 4).map((f, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-error flex-shrink-0 mt-2" aria-hidden="true" />
+                        <span className="text-label-sm text-on-surface-variant">{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-label-sm text-on-surface-variant">Document uploaded. Ask me about the findings.</p>
+                )}
               </div>
-              <ul className="space-y-2">
-                {SIDEBAR_FINDINGS.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-error flex-shrink-0 mt-2" aria-hidden="true" />
-                    <span className="text-label-sm text-on-surface-variant">{f}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            ) : (
+              <div className="p-4 bg-surface-container rounded-2xl border border-outline-variant">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-outline" style={{ fontSize: "20px" }} aria-hidden="true">upload_file</span>
+                  <span className="text-label-md font-bold text-on-surface-variant">No document uploaded</span>
+                </div>
+                <p className="text-label-sm text-on-surface-variant">Upload a report on the Records page and I can answer questions about it.</p>
+              </div>
+            )}
 
             {/* Suggested questions */}
             <div>

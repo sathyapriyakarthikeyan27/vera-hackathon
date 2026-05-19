@@ -5,9 +5,9 @@ import Link from "next/link";
 import { matchSchemes } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
-import type { SchemesOutput, Clinic } from "@/lib/api";
+import type { SchemesOutput, Clinic, SchemeMatch } from "@/lib/api";
 
-const MOCK = true; // set to false to use backend
+const MOCK = false; // set to true to use mock data
 
 const MOCK_CLINICS: Clinic[] = [
   {
@@ -59,6 +59,7 @@ const MOCK_CLINICS: Clinic[] = [
 
 export default function CarePage() {
   const [clinics, setClinics] = useState<Clinic[]>([]);
+  const [schemes, setSchemes] = useState<SchemeMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,7 @@ export default function CarePage() {
       try {
         const result: SchemesOutput = await matchSchemes(sid);
         setClinics(result.nearest_clinics);
+        setSchemes(result.matched_schemes ?? []);
       } catch {
         setError("Could not load care recommendations. Please try again.");
       } finally {
@@ -137,6 +139,35 @@ export default function CarePage() {
             </p>
           </div>
         </div>
+
+        {/* Matched schemes */}
+        {schemes.length > 0 && (
+          <div className="mb-stack-lg">
+            <h2 className="text-headline-md text-on-surface mb-4">Government Schemes for You</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {schemes.map((s, i) => (
+                <div key={i} className="bg-surface-container-lowest p-5 rounded-2xl border-l-4 border-secondary soft-elevation">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h3 className="text-label-md font-bold text-on-surface">{s.scheme_name}</h3>
+                    {s.url && (
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-label-sm text-primary hover:underline flex-shrink-0"
+                        aria-label={`Learn more about ${s.scheme_name}`}
+                      >
+                        Learn more
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-body-md text-on-surface-variant mb-2">{s.description}</p>
+                  <p className="text-label-sm text-secondary font-medium">{s.eligibility_summary}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Clinics grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-stack-lg">

@@ -2,10 +2,9 @@
 Google Gemini service client.
 Uses google-generativeai SDK (google-generativeai==0.8.3).
 
-MedGemma (medgemma-4b-it / medgemma-27b-it) requires Vertex AI or special
-allowlist access — it is NOT available via the standard Gemini API key.
-MEDGEMMA_MODEL defaults to gemini-2.5-flash-lite so all calls work out of the box.
-Set MEDGEMMA_MODEL=medgemma-4b-it in .env only if you have Vertex AI access.
+Model constants:
+  GEMINI_FLASH = "gemini-2.5-flash"   — all agents except Agent 3
+  GEMINI_PRO   = "gemini-2.5-pro"     — Agent 3 (document analysis, clinical signal extraction)
 """
 
 import asyncio
@@ -17,9 +16,8 @@ logger = logging.getLogger(__name__)
 
 _configured = False
 
-# Model used for medical reasoning. Defaults to Gemini Flash because
-# MedGemma requires Vertex AI access not available on the standard API key.
-MEDGEMMA_MODEL = os.getenv("MEDGEMMA_MODEL", "gemini-2.5-flash-lite")
+GEMINI_FLASH = "gemini-2.5-flash"
+GEMINI_PRO = "gemini-2.5-pro"
 
 _RETRY_DELAYS = [5, 15]  # seconds to wait on 429 before each retry
 
@@ -40,7 +38,7 @@ def _configure() -> None:
             return
         genai.configure(api_key=key)
         _configured = True
-        logger.info("Gemini API configured (model default: gemini-2.5-flash-lite, medical model: %s).", MEDGEMMA_MODEL)
+        logger.info("Gemini API configured (flash: %s, pro: %s).", GEMINI_FLASH, GEMINI_PRO)
 
 
 def validate_key_on_startup() -> None:
@@ -54,8 +52,8 @@ def validate_key_on_startup() -> None:
         )
     else:
         logger.info(
-            "STARTUP: GEMINI_API_KEY is present (length=%d). Medical model: %s.",
-            len(key), MEDGEMMA_MODEL,
+            "STARTUP: GEMINI_API_KEY is present (length=%d). Flash: %s, Pro: %s.",
+            len(key), GEMINI_FLASH, GEMINI_PRO,
         )
 
 
@@ -79,7 +77,7 @@ async def _generate_with_retry(model_obj, content, **kwargs) -> str:
     raise last_exc
 
 
-async def generate(prompt: str, model: str = "gemini-2.5-flash-lite") -> str:
+async def generate(prompt: str, model: str = GEMINI_FLASH) -> str:
     _configure()
     if not os.getenv("GEMINI_API_KEY", "").strip():
         raise RuntimeError("GEMINI_API_KEY is not set — add it to backend/.env")
@@ -90,7 +88,7 @@ async def generate(prompt: str, model: str = "gemini-2.5-flash-lite") -> str:
 async def generate_safe(
     prompt: str,
     fallback: str,
-    model: str = "gemini-2.5-flash-lite",
+    model: str = GEMINI_FLASH,
 ) -> str:
     """Like generate() but returns fallback text on any error — never raises."""
     try:
@@ -100,7 +98,7 @@ async def generate_safe(
         return fallback
 
 
-async def generate_multimodal(parts: list, model: str = "gemini-2.5-flash-lite") -> str:
+async def generate_multimodal(parts: list, model: str = GEMINI_FLASH) -> str:
     """Send a multimodal prompt (text + inline file data) to Gemini."""
     _configure()
     if not os.getenv("GEMINI_API_KEY", "").strip():
@@ -112,7 +110,7 @@ async def generate_multimodal(parts: list, model: str = "gemini-2.5-flash-lite")
 async def generate_multimodal_safe(
     parts: list,
     fallback: str,
-    model: str = "gemini-2.5-flash-lite",
+    model: str = GEMINI_FLASH,
 ) -> str:
     try:
         return await generate_multimodal(parts, model)
@@ -121,24 +119,16 @@ async def generate_multimodal_safe(
         return fallback
 
 
-async def generate_medgemma_multimodal(parts: list) -> str:
-    """
-    Medical document / image analysis.
-    Uses MEDGEMMA_MODEL (defaults to gemini-2.5-flash-lite).
-    Set MEDGEMMA_MODEL=medgemma-4b-it only if you have Vertex AI access.
-    """
-    _configure()
-    if not os.getenv("GEMINI_API_KEY", "").strip():
-        raise RuntimeError("GEMINI_API_KEY is not set")
-    m = genai.GenerativeModel(MEDGEMMA_MODEL)
-    return await _generate_with_retry(m, parts)
+async def generate_pro_multimodal(parts: list) -> str:
+    """Document and image analysis using Gemini 2.5 Pro (Agent 3)."""
+    return await generate_multimodal(parts, model=GEMINI_PRO)
 
 
-async def generate_medgemma_multimodal_safe(parts: list, fallback: str) -> str:
+async def generate_pro_multimodal_safe(parts: list, fallback: str) -> str:
     try:
-        return await generate_medgemma_multimodal(parts)
+        return await generate_pro_multimodal(parts)
     except Exception as exc:
-        logger.warning("Medical model call failed (model=%s): %s", MEDGEMMA_MODEL, exc)
+        logger.warning("Gemini Pro multimodal failed: %s", exc)
         return fallback
 
 

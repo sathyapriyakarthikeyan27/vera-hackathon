@@ -1,7 +1,6 @@
 """
 Records Explainer Agent (Agent 3).
-Uses MedGemma to analyze uploaded medical documents (PDF, JPG, PNG).
-MedGemma handles all document types including medical images.
+Uses Gemini 2.5 Pro to analyze uploaded medical documents (PDF, JPG, PNG).
 
 Dual output every time:
   1. Plain-language user explanation — in the user's language, no jargon
@@ -123,7 +122,7 @@ Rules:
 - Write in {lang}.
 - Do not use em dashes."""
 
-    text = await gemini.generate_medgemma_multimodal_safe(
+    text = await gemini.generate_pro_multimodal_safe(
         parts=[{"mime_type": mime_type, "data": b64}, prompt],
         fallback=_FALLBACK_EXPLANATION["text"],
     )
@@ -134,9 +133,11 @@ Rules:
 async def _extract_signals(content: bytes, mime_type: str) -> dict:
     b64 = base64.b64encode(content).decode()
 
-    prompt = """Analyze this medical document and extract clinical signals.
+    prompt = """You are a clinical data extraction system. Read this medical document carefully and extract structured clinical signals for a cancer risk assessment system.
 
-Return ONLY valid JSON in this exact format — no prose, no markdown fences:
+Your task is to identify findings that are relevant to cancer risk — abnormalities, polyps, lesions, irregular tissue, elevated markers, or recommendations for urgent follow-up.
+
+You MUST return ONLY a valid JSON object in exactly this format. No prose before or after. No markdown fences. No explanation. Just the JSON:
 {
   "anomalies": ["specific finding 1", "specific finding 2"],
   "severity": "high",
@@ -145,16 +146,18 @@ Return ONLY valid JSON in this exact format — no prose, no markdown fences:
   "urgency_flag": true
 }
 
-Guidelines:
-- severity "high" = findings indicating elevated cancer risk or requiring urgent follow-up
-- severity "medium" = findings warranting monitoring or further investigation
-- severity "low" = normal or routine findings with no significant concern
-- anomalies should be specific (e.g. "irregular polyp 8mm" not "abnormality found")
-- If the document is normal / clear, anomalies = [], severity = "low", urgency_flag = false
-- specialist_signal should be the exact specialist type if clearly indicated, else null"""
+Field definitions — follow these exactly:
+- "anomalies": array of strings. Each string is one specific clinical finding, quoted directly or paraphrased from the document. Be specific: "12mm tubulovillous adenoma, ascending colon" not "abnormality found". Empty array [] if document is normal.
+- "severity": exactly one of "high", "medium", or "low". Use "high" if findings indicate elevated cancer risk or require urgent follow-up. Use "medium" if findings warrant monitoring. Use "low" if the document is normal or routine.
+- "confidence": float 0.0 to 1.0. How confident you are in this extraction based on document clarity and specificity of findings.
+- "specialist_signal": string with the exact specialist type most relevant to these findings (e.g. "Gastroenterologist", "Oncologist", "Pulmonologist", "Dermatologist"), or null if not indicated.
+- "urgency_flag": true if the document recommends urgent follow-up, repeat procedure, or immediate specialist referral. Otherwise false.
+
+If the document is normal with no concerning findings: anomalies=[], severity="low", urgency_flag=false.
+Return only the JSON object."""
 
     try:
-        raw = await gemini.generate_medgemma_multimodal(
+        raw = await gemini.generate_pro_multimodal(
             parts=[{"mime_type": mime_type, "data": b64}, prompt]
         )
         text = raw.strip()

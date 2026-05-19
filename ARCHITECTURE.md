@@ -3,174 +3,247 @@
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (Next.js)                    │
-│                                                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │  Chat UI  │  │ Risk     │  │ Scheme   │  │Education │   │
-│  │(Companion)│  │ Timeline │  │ Cards    │  │ Video    │   │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-└───────┼─────────────┼─────────────┼──────────────┼─────────┘
-        │             │             │              │
-        └─────────────┴─────────────┴──────────────┘
-                                │
-                    ┌───────────▼───────────┐
-                    │   Orchestration API    │
-                    │   (FastAPI / Python)   │
-                    │   Deployed on Vultr    │
-                    └───┬───┬───┬───┬───────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        Frontend (Next.js — Vercel)                        │
+│                                                                            │
+│  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌──────────┐  ┌─────────┐  │
+│  │ Landing  │  │  Signup  │  │ Assessment │  │  /risk   │  │  /care  │  │
+│  │   /      │  │ /signup  │  │/assessment │  │          │  │         │  │
+│  └──────────┘  └──────────┘  └────────────┘  └──────────┘  └─────────┘  │
+│                                                                            │
+│  ┌──────────┐  ┌──────────┐                                               │
+│  │ Records  │  │  Chat    │                                               │
+│  │ /records │  │  /chat   │                                               │
+│  └──────────┘  └──────────┘                                               │
+└──────────────────────────────────┬───────────────────────────────────────┘
+                                   │  Next.js rewrites /api/* → Vultr
+                                   ▼
+                    ┌──────────────────────────┐
+                    │   Caddy (port 80)         │
+                    │   Reverse proxy           │
+                    │   /api/* → backend:8000   │
+                    │   /* → frontend:3000      │
+                    └─────────────┬────────────┘
+                                  │
+                    ┌─────────────▼────────────┐
+                    │   FastAPI Backend          │
+                    │   Deterministic Router     │
+                    │   (Python, async)          │
+                    └───┬───┬───┬───┬───────────┘
                         │   │   │   │
-          ┌─────────────┘   │   │   └─────────────┐
-          │                 │   │                  │
-    ┌─────▼──────┐   ┌──────▼─┐ │  ┌─────────────▼──┐
-    │   Risk     │   │Scheme  │ │  │  Education      │
-    │  Profiler  │   │Navig.  │ │  │  Agent          │
-    │  Agent     │   │Agent   │ │  │                 │
-    └─────┬──────┘   └──────┬─┘ │  └─────────────┬──┘
-          │                 │   │                 │
-          └─────────────────┘   │   ┌─────────────┘
-                                │   │
-                    ┌───────────▼───▼──────────┐
-                    │   Companion Agent         │
-                    │   (session memory)        │
-                    └──────────────────────────┘
+          ┌─────────────┘   │   │   └──────────────────┐
+          │                 │   │                       │
+   ┌──────▼──────┐  ┌───────▼─┐ │  ┌──────────────────▼──┐
+   │  Agent 1    │  │ Agent 2  │ │  │    Agent 3            │
+   │  Risk       │  │ Care     │ │  │    Records Explainer  │
+   │  Profiler   │  │ Navigator│ │  │                       │
+   │  + Reconcile│  │          │ │  └──────────────────┬───┘
+   └──────┬──────┘  └───────┬──┘ │                     │
+          │                 │    │  ┌──────────────────▼───┐
+          └─────────────────┘    │  │    Agent 4             │
+                                 └─►│    Companion           │
+                                    │    (check-ins)         │
+                                    └────────────────────────┘
+
+                    ┌───────────────────────────────┐
+                    │   Shared State (PostgreSQL)    │
+                    │   risk_assessment JSONB        │
+                    │   session_store, appointments  │
+                    │   pgvector: RAG + memory       │
+                    └───────────────────────────────┘
 
 External Services:
-  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-  │ Google Gemini│  │  MedGemma    │  │ Vultr (infra) │
-  │ 2.0 Flash    │  │ (via Google) │  │               │
-  └──────────────┘  └──────────────┘  └──────────────┘
+  ┌──────────────────┐  
+  │  Gemini 2.0 Flash│   
+  │  Questions, risk  │  
+  │  summaries, chat  │  
+  └──────────────────┘ 
 ```
+
+---
 
 ## Component Breakdown
 
-### Frontend — Next.js
+### Frontend — Next.js (Vercel)
 
-- **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS
-- **State**: React Context or Zustand (lightweight)
+- **Framework**: Next.js (App Router)
+- **Styling**: Tailwind CSS v4 (CSS-first, no tailwind.config.js — tokens in `globals.css` via `@theme`)
+- **Design system**: Care & Clarity — custom tokens, typography utilities, `soft-elevation`
+- **i18n**: English only (next-intl dropped for demo)
+- **Session**: localStorage — `vera_session_id`, `vera_profile_complete`, `vera_assessment_complete`
 - **Key Pages**:
-  - `/` — Landing + VERA intro
-  - `/chat` — Main conversation interface (all 4 agents surface here)
-  - `/risk` — Risk profile result + visual timeline
-  - `/schemes` — Matched government schemes + clinic map
-  - `/learn` — Education video + text summary
-  - `/companion` — Follow-up plan + family message
+  - `/` — Landing page with shared Navbar + Footer
+  - `/signup` — Profile collection (name, DOB, gender, location, height, weight)
+  - `/assessment` — AI-generated adaptive questions (6, card UI, one at a time)
+  - `/risk` — Risk result + plain-language reasoning + conflict card if reconciliation fired
+  - `/care` — Government schemes + nearest specialist (Agent 2)
+  - `/records` — Upload lab reports/MRIs, plain-language explanation (Agent 3) + chat CTA
+  - `/chat` — Report Q&A chat with VERA (sidebar + scrollable message area)
 
-### Backend — FastAPI (Python)
+### Shared Components
 
-- **Framework**: FastAPI
-- **Deployment**: Vultr (single instance, Docker container)
-- **Role**: Orchestrates the 4 agents, manages session state, routes to AI APIs
-- **Endpoints**:
-  - `POST /session` — create new session
-  - `POST /risk/question` — stream next Risk Profiler question
-  - `POST /risk/score` — compute and return risk score
-  - `POST /schemes/match` — return matched schemes + clinics
-  - `POST /education/generate` — return video URL + text summary
-  - `POST /companion/followup` — return follow-up plan + message draft
-  - `GET /session/{id}` — retrieve session (Companion memory)
+- **`Navbar`** — fixed top, active state via `usePathname()`, optional `right` prop
+- **`Footer`** — centered, Care & Clarity tokens, disclaimer + copyright
+- **`StartAssessmentButton`** — client component handling localStorage routing logic
 
-### Session Store
+### Backend — FastAPI (Vultr, Docker)
 
-- **Demo**: SQLite (embedded, zero-config)
-- **Production**: Redis
-- Stores: session_id, user profile, risk score, language, agent state
-- TTL: 30 days for demo, configurable
+- **Framework**: FastAPI (async)
+- **Role**: Deterministic router + agent orchestration + session persistence
+- **Key Endpoints**:
+  - `POST /signup` — create session, store profile, compute BMI
+  - `POST /risk/start` — create session + return first AI-generated question
+  - `POST /risk/answer` — submit answer, return next question or final score
+  - `POST /risk/reconcile` — Agent 1 reconcile mode (triggered after pending_signals arrive)
+  - `POST /records/upload` — Agent 3: explain document + extract clinical signals JSON
+  - `POST /schemes/match` — Agent 2: matched schemes + specialists by location + risk
+  - `POST /companion/chat` — Agent 4: chat message
+  - `GET /session/{id}` — retrieve full session state
+  - `GET /health` — health check
+
+### Deterministic Router Logic
+
+```python
+if user.is_new:
+    route_to(Agent1)               # initial profiling
+elif payload.file_uploaded:
+    route_to(Agent3)               # records + signal extraction
+elif payload.is_scheduled_trigger:
+    route_to(Agent4)               # proactive check-in
+elif risk_assessment.pending_signals and not risk_assessment.reconciled:
+    route_to(Agent1)               # reconcile mode
+else:
+    route_to(Agent2)               # care navigation
+```
+
+The router is deterministic by design. Never replace with an LLM-based planner.
+
+---
+
+## Database Schema
+
+### PostgreSQL Tables
+
+```sql
+-- Sessions (active conversation state — no user accounts for demo)
+session_store (
+  session_id    TEXT PRIMARY KEY,
+  data          JSONB,              -- full session state
+  created_at    TIMESTAMPTZ,
+  updated_at    TIMESTAMPTZ
+)
+
+-- Companion memory (pgvector)
+checkin_memory (
+  id            UUID PRIMARY KEY,
+  session_id    TEXT,
+  role          TEXT,              -- 'vera' | 'user'
+  content       TEXT,
+  embedding     vector(768),
+  created_at    TIMESTAMPTZ
+)
+
+-- Government scheme data (pgvector RAG — synthetic data, no real APIs)
+scheme_data (
+  id            UUID PRIMARY KEY,
+  scheme_name   TEXT,
+  country       TEXT,
+  cancer_types  TEXT[],
+  content       TEXT,
+  metadata      JSONB,
+  embedding     vector(768)
+)
+```
+
+### Shared Risk Assessment Object (JSONB in session_store)
+
+```python
+risk_assessment = {
+    "score":            "low" | "medium" | "high",   # Agent 1 owns this
+    "confidence":       0.0-1.0,
+    "reasoning":        str,                          # plain-language explanation
+    "source":           "profile_only" | "profile+records",
+    "pending_signals":  [],                           # Agent 3 writes here only
+    "reconciled":       bool,
+    "conflict": None | {
+        "original_score": str,
+        "new_score":      str,
+        "reason":         str,
+        "shown_to_user":  bool
+    }
+}
+```
+
+---
 
 ## AI Model Routing
 
-### Gemini (Google AI Studio)
+### Gemini 2.0 Flash
 
 Used for:
-- Risk Profiler: conversational question flow, reasoning over answers
-- Scheme Navigator: scheme description summarization, eligibility matching
-- Education Agent: personalized script generation (multilingual)
-- Companion Agent: multilingual follow-up text, family message drafting
+- Agent 1: Adaptive question generation, plain-language risk summary
+- Agent 2: Scheme description summarization, eligibility matching
+- Agent 4: Check-in and chat message generation
+- Embeddings: `models/embedding-001` (768-dimensional, v1beta compatible)
 
-Model: `gemini-2.0-flash` (speed priority) or `gemini-2.0-pro` (quality priority)
-
-### MedGemma
+### Gemini 2.5 Pro — Agent 3 only
 
 Used for:
-- Risk Profiler: medical risk assessment over patient profile
-- Model: `medgemma-4b-it` (primary); rule-based fallback if unavailable
-- Accessed via Google AI Studio — same API key as Gemini
+- Reading uploaded lab reports, MRI scans, pathology reports (PDF, JPG, PNG)
+- Extracting structured clinical signals JSON from medical documents
+- Plain-language explanation of medical findings
 
-### Model Routing Logic
+**Gemini Pro handles all document types including images. Gemini Vision and MedGemma are not used.**
 
-```
-User answers complete
-        ↓
-MedGemma (medical risk scoring — structured JSON output)
-        ↓ (concurrent)
-Gemini 2.0 Flash (warm plain-language summary)
-        ↓
-Risk profile returned to frontend
-```
+---
 
-## Data Flow — Full Session
+## Deployment
+
+### Vultr (Full Stack — Primary Demo)
 
 ```
-1. User opens VERA
-   → Frontend creates session (POST /session)
-   → Companion Agent loads prior session if exists
-
-2. Risk Profiler phase
-   → Frontend streams 8 questions from Gemini
-   → User answers stored in session
-   → On completion: Featherless computes risk score
-   → Gemini formats output + generates timeline data
-   → Frontend renders risk card + visual timeline
-
-3. Scheme Navigator phase
-   → Backend receives location + risk profile
-   → Scheme matching against seed data (+ Gemini for descriptions)
-   → Returns schemes + clinic list sorted by distance
-   → Frontend renders scheme cards + clinic tiles
-
-4. Education phase
-   → Backend receives risk type + language
-   → Gemini generates personalized script
-   → Video segment selected/assembled from pre-rendered library
-   → Returns video URL + text summary
-   → Frontend plays video
-
-5. Companion phase
-   → All session context passed to Companion Agent
-   → Gemini generates follow-up plan + family message
-   → Session saved with timestamp
-   → On next visit: session loaded, user greeted by name
+Vultr Dedicated CPU (2 vCPU / 8GB RAM)
+  └── Docker Compose
+        ├── db          pgvector/pgvector:pg16
+        │                 schema.sql + seed.py (scheme RAG data)
+        ├── backend     FastAPI on port 8000 (internal only)
+        ├── frontend    Next.js standalone on port 3000 (internal only)
+        └── caddy       Port 80 (HTTP, auto-HTTPS disabled for IP deployment)
+                          /api/* → strips prefix → backend:8000
+                          /*     → frontend:3000
 ```
 
-## Deployment — Vultr
+### Vercel (Frontend — Alternative)
 
-```
-Vultr Cloud Instance
-  ├── Docker container: FastAPI backend
-  ├── Nginx reverse proxy (HTTPS)
-  ├── SQLite data volume (or Redis container)
-  └── Static file serving for pre-rendered video segments
+- Next.js deployed on Vercel (free tier, CI/CD on push to `feature/demo-ready`)
+- `BACKEND_URL=http://<vultr-ip>/api` — Next.js rewrites `/api/*` → Vultr backend via Caddy
+- `output: "standalone"` disabled on Vercel (conditional on `DOCKER_BUILD=1`)
 
-Frontend: Vercel (Next.js — free tier, fastest deploy)
-  OR
-Frontend: Vultr Object Storage + CDN (if Vultr award requires full Vultr stack)
-```
+---
 
 ## Environment Variables
 
+### Root `.env` (Docker Compose)
+
 ```
-GEMINI_API_KEY=          # covers both Gemini 2.0 Flash and MedGemma
+GEMINI_API_KEY=          # Gemini 2.0 Flash + embeddings
+POSTGRES_PASSWORD=       # PostgreSQL password
+SESSION_SECRET=          # Session signing secret
+DOMAIN=                  # Server IP or domain (Caddy binding)
+CORS_ORIGINS=            # Allowed origins (e.g. http://<ip> or https://<domain>)
+```
+
+### `backend/.env` (inside backend container)
+
+```
+GEMINI_API_KEY=
+DATABASE_URL=postgresql://vera:<POSTGRES_PASSWORD>@db:5432/vera
 SESSION_SECRET=
-DATABASE_URL=sqlite:///./vera.db
-CORS_ORIGINS=https://vera-demo.vercel.app
-VULTR_REGION=blr1        # Bangalore for India latency
+CORS_ORIGINS=
 ```
 
-## Demo Stability Plan
+### Vercel Environment Variables
 
-- All agent responses have hardcoded fallbacks
-- If MedGemma is unavailable → use deterministic rule-based fallback scoring
-- If video pipeline fails → show text summary only
-- If geolocation denied → default to Delhi NCR for demo
-- Session seed: pre-load demo user "Priya" so Companion memory works instantly
+```
+BACKEND_URL=http://<vultr-ip>/api
+```

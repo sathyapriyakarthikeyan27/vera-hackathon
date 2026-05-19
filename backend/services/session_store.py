@@ -57,6 +57,7 @@ async def create_session(language: str = "en") -> dict:
         "schemes_output": None,
         "education_output": None,
         "companion_output": None,
+        "records_output": None,
         "completed_agents": [],
     }
 
@@ -97,7 +98,8 @@ async def update_session(session_id: str, updates: dict) -> Optional[dict]:
                 education_output = $8,
                 companion_output = $9,
                 completed_agents = $10,
-                updated_at       = $11
+                updated_at       = $11,
+                records_output   = $12
             WHERE session_id = $1
             """,
             sid,
@@ -111,6 +113,7 @@ async def update_session(session_id: str, updates: dict) -> Optional[dict]:
             session.get("companion_output"),
             session.get("completed_agents") or [],
             now,
+            session.get("records_output"),
         )
     return session
 

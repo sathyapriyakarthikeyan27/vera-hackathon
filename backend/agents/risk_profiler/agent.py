@@ -1,7 +1,6 @@
 """
 Risk Profiler Agent.
-Uses MedGemma for structured medical risk assessment,
-then Gemini Flash for a personalized plain-language summary.
+Uses Gemini 2.0 Flash for structured medical risk assessment and plain-language summaries.
 """
 
 import asyncio
@@ -80,7 +79,7 @@ async def reconcile(session_id: str) -> Optional[dict]:
 
     original_score: str = risk_assessment.get("score", "Moderate")
     risk_profile: dict = session.get("risk_profile") or {}
-    original_reasoning: str = risk_profile.get("medgemma_reasoning", "")
+    original_reasoning: str = risk_profile.get("ai_reasoning", "")
 
     risk_state: dict = session.get("risk_state") or {}
     answers: dict = risk_state.get("answers") or {}
@@ -237,7 +236,7 @@ async def process_answer(session_id: str, question_id: str, answer: str, key: Op
         risk_assessment = {
             "score": risk_profile["risk_level"],
             "confidence": 0.8,
-            "reasoning": risk_profile.get("medgemma_reasoning", ""),
+            "reasoning": risk_profile.get("ai_reasoning", ""),
             "source": "profile_only",
             "pending_signals": [],
             "reconciled": True,
@@ -260,19 +259,19 @@ async def process_answer(session_id: str, question_id: str, answer: str, key: Op
 
 
 async def _compute_profile(answers: dict) -> dict:
-    medgemma_result, _ = await asyncio.gather(
-        _medgemma_assess(answers),
+    gemini_result, _ = await asyncio.gather(
+        _gemini_assess(answers),
         asyncio.sleep(0),
     )
 
-    risk_level = medgemma_result.get("risk_level", "Moderate")
+    risk_level = gemini_result.get("risk_level", "Moderate")
     if risk_level not in _VALID_LEVELS:
         risk_level = "Moderate"
 
-    cancer_types: list[str] = medgemma_result.get("cancer_types_flagged") or []
-    risk_score: int = medgemma_result.get("risk_score") or 5
-    screening_gap = medgemma_result.get("screening_gap_years")
-    reasoning = medgemma_result.get("reasoning", "")
+    cancer_types: list[str] = gemini_result.get("cancer_types_flagged") or []
+    risk_score: int = gemini_result.get("risk_score") or 5
+    screening_gap = gemini_result.get("screening_gap_years")
+    reasoning = gemini_result.get("reasoning", "")
 
     timeline = _build_timeline(answers)
 
@@ -288,7 +287,7 @@ async def _compute_profile(answers: dict) -> dict:
         "screening_gap_years": screening_gap,
         "timeline": timeline,
         "plain_language_summary": summary,
-        "medgemma_reasoning": reasoning,
+        "ai_reasoning": reasoning,
         "disclaimer": (
             "This is not a medical diagnosis. VERA provides risk awareness only. "
             "Please consult a qualified doctor."
@@ -296,9 +295,9 @@ async def _compute_profile(answers: dict) -> dict:
     }
 
 
-async def _medgemma_assess(answers: dict) -> dict:
+async def _gemini_assess(answers: dict) -> dict:
     """
-    Call MedGemma for structured medical risk assessment.
+    Call Gemini Flash for structured medical risk assessment.
     Falls back to rule-based scoring on any failure.
     """
     _LS = {
@@ -349,7 +348,7 @@ Guidelines:
         import google.generativeai as genai
         gemini._configure()
         m = genai.GenerativeModel(
-            gemini.MEDGEMMA_MODEL,
+            gemini.GEMINI_FLASH,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
                 temperature=0.1,
@@ -359,14 +358,14 @@ Guidelines:
         return json.loads(raw)
     except Exception as exc:
         logger.warning(
-            "Risk assessment Gemini failed (model=%s): %s — using rule-based fallback",
-            gemini.MEDGEMMA_MODEL, exc,
+            "Risk assessment failed (model=%s): %s — using rule-based fallback",
+            gemini.GEMINI_FLASH, exc,
         )
         return _rule_based_fallback(answers)
 
 
 def _rule_based_fallback(answers: dict) -> dict:
-    """Deterministic fallback used when MedGemma is unavailable or returns invalid JSON."""
+    """Deterministic fallback used when Gemini is unavailable or returns invalid JSON."""
     score = 0
     cancer: set[str] = set()
     gender = answers.get("gender", "")

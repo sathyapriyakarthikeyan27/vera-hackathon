@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS scheme_data (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Add records_output column if it was not in the original CREATE TABLE
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS records_output JSONB;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_updated    ON sessions(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_appointments_session ON appointments(session_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_date   ON appointments(appointment_date);
