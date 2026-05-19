@@ -331,7 +331,7 @@ Return ONLY valid JSON — no prose, no markdown fences:
 {{
   "risk_level": "Moderate",
   "risk_score": 6,
-  "cancer_types_flagged": ["colorectal"],
+  "cancer_types_flagged": [""],
   "screening_gap_years": 4,
   "reasoning": "One sentence explaining the primary risk factors for this specific person.",
   "recommendations": "One sentence on the most urgent recommended next step for this person."
@@ -509,6 +509,8 @@ Previous assessment answers:
 Rules:
 - Write in VERA's warm, direct voice using "you"/"your"
 - Do NOT repeat any already-answered topic
+- Do NOT repeat the same question or topic again
+- Do NOT use any greetings like Hi! or Hi there in the question
 - Cover: family cancer history, last screening, smoking, alcohol, physical activity, or gender/age-specific screenings{gender_note}
 - If this IS question {MAX_ASSESSMENT_QUESTIONS}: open-ended health concerns, type=text, optional=true, options=[]
 - Otherwise: type=choice, 3-5 short clear options

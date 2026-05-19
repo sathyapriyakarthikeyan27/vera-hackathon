@@ -143,6 +143,8 @@ export default function RiskPage() {
   }
 
   const profile = session.risk_profile as ExtendedRiskProfile;
+  const cancerTypesFlagged = profile.cancer_types_flagged ?? [];
+  const specialistType = cancerTypesFlagged[0] ?? "Oncologist";
   const riskLevel: RiskLevel = profile.risk_level in RISK_CONFIG
     ? profile.risk_level as RiskLevel
     : "Moderate";
@@ -202,11 +204,11 @@ export default function RiskPage() {
             </span>
 
             {/* Cancer types flagged */}
-            {profile.cancer_types_flagged.length > 0 && (
+            {cancerTypesFlagged.length > 0 && (
               <div className="w-full mb-6">
                 <p className="text-label-sm text-on-surface-variant uppercase tracking-widest mb-3">Areas to Monitor</p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {profile.cancer_types_flagged.map((t) => (
+                  {cancerTypesFlagged.map((t) => (
                     <span
                       key={t}
                       className="px-3 py-1.5 bg-primary-fixed/20 text-primary rounded-full text-label-sm capitalize"
@@ -242,13 +244,11 @@ export default function RiskPage() {
                       : "Please book with a specialist as soon as you can. I'll help you find one nearby."
                   }
                 />
-{profile.cancer_types_flagged.length > 0 && (
-                  <RecommendationItem
-                    icon="clinical_notes"
-                    title={`Consult a Specialist — ${profile.cancer_types_flagged[0]}`}
-                    body="A specialist can give you a clearer picture based on your specific risk factors."
-                  />
-                )}
+                <RecommendationItem
+                  icon="clinical_notes"
+                  title={`Consult a Specialist — ${specialistType}`}
+                  body="A specialist can give you a clearer picture based on your specific risk factors."
+                />
               </div>
             </div>
 
