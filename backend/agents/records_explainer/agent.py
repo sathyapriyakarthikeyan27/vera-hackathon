@@ -63,6 +63,7 @@ async def analyze(session_id: str, file: UploadFile) -> Optional[dict]:
     )
 
     explanation["document_type"] = _guess_doc_type(mime_type, filename)
+    explanation["filename"] = filename
 
     # Write signals to pending_signals, set reconciled = False
     risk_profile = session.get("risk_profile") or {}
@@ -170,7 +171,7 @@ Return only the JSON object."""
     except Exception:
         return _FALLBACK_SIGNALS
 
-    if result is None:
+    if not isinstance(result, dict):
         return _FALLBACK_SIGNALS
 
     return {

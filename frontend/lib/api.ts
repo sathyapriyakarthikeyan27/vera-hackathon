@@ -154,6 +154,14 @@ export interface CompanionOutput {
   follow_up_plan: FollowUpItem[];
   family_message_drafts: Record<Language, string>;
   reminder_schedule: Array<{ date: string; message: string }>;
+  conflict_context?: {
+    triggered: boolean;
+    uncertain: boolean;
+    original_score: string | null;
+    new_score: string | null;
+    document_type: string | null;
+    document_filename: string | null;
+  };
 }
 
 export async function generateFollowup(

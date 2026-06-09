@@ -234,15 +234,24 @@ export default function RecordsPage() {
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-2.5 h-2.5 rounded-full bg-error animate-pulse" aria-hidden="true" />
                 <p className="text-label-md font-bold text-error uppercase tracking-widest">
-                  Assessment Updated
+                  {reconcile.uncertain ? "Findings to Review" : "Assessment Updated"}
                 </p>
               </div>
-              <p className="text-body-lg text-on-surface leading-relaxed mb-4">
-                Your initial profile suggested{" "}
-                <span className="font-semibold">{reconcile.original_score}</span>{" "}
-                risk. Your {output?.explanation.document_type ?? "document"} has changed that picture. I now consider your risk to be{" "}
-                <span className="font-bold text-error">{reconcile.new_score}</span>.
-              </p>
+              {reconcile.uncertain ? (
+                <p className="text-body-lg text-on-surface leading-relaxed mb-4">
+                  Your {output?.explanation.document_type ?? "document"} surfaced findings that
+                  need a specialist to review. Your risk level stays{" "}
+                  <span className="font-semibold">{reconcile.new_score}</span> for now, and I
+                  recommend a follow-up to get a clearer picture.
+                </p>
+              ) : (
+                <p className="text-body-lg text-on-surface leading-relaxed mb-4">
+                  Your initial profile suggested{" "}
+                  <span className="font-semibold">{reconcile.original_score}</span>{" "}
+                  risk. Your {output?.explanation.document_type ?? "document"} has changed that picture. I now consider your risk to be{" "}
+                  <span className="font-bold text-error">{reconcile.new_score}</span>.
+                </p>
+              )}
               {reconcile.reason && (
                 <p className="text-body-md text-on-surface-variant leading-relaxed mb-5 bg-surface-container-lowest rounded-xl px-4 py-3 border border-error/20">
                   {reconcile.reason}

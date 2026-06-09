@@ -5,13 +5,21 @@ drafts, and a reminder schedule based on the full session.
 """
 
 import asyncio
+import datetime
 import json
 from typing import Optional
 
 from services.session_store import get_session, update_session
 from services import gemini
 
-_CURRENT_DATE = "2026-05-17"
+
+def _today() -> str:
+    return datetime.date.today().isoformat()
+
+
+def _offset(days: int) -> str:
+    return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+
 
 _AGE_LABELS = {
     "under_25": "under 25", "25_34": "25 to 34", "35_44": "35 to 44",
@@ -36,38 +44,21 @@ def _build_person_context(answers: dict, risk_level: str, cancer_types: list) ->
     return "\n".join(f"- {p}" for p in parts)
 
 
-_FALLBACK_FOLLOW_UP = [
-    {
-        "date": "2026-05-24",
-        "action": "Call your nearest government hospital to book a free cancer screening appointment",
-        "location": None,
-        "contact": None,
-    },
-    {
-        "date": "2026-05-31",
-        "action": "Confirm your appointment and write down any questions you want to ask the doctor",
-        "location": None,
-        "contact": None,
-    },
-    {
-        "date": "2026-06-15",
-        "action": "Attend your cancer screening appointment",
-        "location": None,
-        "contact": None,
-    },
-    {
-        "date": "2026-07-01",
-        "action": "Follow up with your doctor on the screening results",
-        "location": None,
-        "contact": None,
-    },
-]
+def _fallback_follow_up() -> list:
+    return [
+        {"date": _offset(7), "action": "Call your nearest government hospital to book a free cancer screening appointment", "location": None, "contact": None},
+        {"date": _offset(14), "action": "Confirm your appointment and write down any questions you want to ask the doctor", "location": None, "contact": None},
+        {"date": _offset(29), "action": "Attend your cancer screening appointment", "location": None, "contact": None},
+        {"date": _offset(45), "action": "Follow up with your doctor on the screening results", "location": None, "contact": None},
+    ]
 
-_FALLBACK_REMINDERS = [
-    {"date": "2026-05-21", "message": "Have you booked your free cancer screening yet? I'm here to help if you need it."},
-    {"date": "2026-06-10", "message": "Your screening appointment is coming up soon. You are doing the right thing."},
-    {"date": "2026-07-01", "message": "Time to follow up on your screening results. Call your doctor today."},
-]
+
+def _fallback_reminders() -> list:
+    return [
+        {"date": _offset(4), "message": "Have you booked your free cancer screening yet? I'm here to help if you need it."},
+        {"date": _offset(24), "message": "Your screening appointment is coming up soon. You are doing the right thing."},
+        {"date": _offset(45), "message": "Time to follow up on your screening results. Call your doctor today."},
+    ]
 
 _FALLBACK_MESSAGES = {
     "en": (
@@ -110,21 +101,53 @@ async def generate_followup(session_id: str) -> Optional[dict]:
     top_clinic = clinics[0] if clinics else None
     recommended_specialist = schemes_output.get("recommended_specialist", "Oncologist")
 
+    risk_assessment: dict = session.get("risk_assessment") or {}
+    conflict: Optional[dict] = risk_assessment.get("conflict")
+
+    records_output: dict = session.get("records_output") or {}
+    document_type: str = records_output.get("document_type", "")
+    document_filename: str = records_output.get("filename", "")
+    doc_label: str = document_filename or document_type or "uploaded medical document"
+
     plan_result, messages_result = await asyncio.gather(
-        _generate_plan(user_name, risk_level, cancer_types, location, top_clinic, recommended_specialist, answers),
+        _generate_plan(
+            user_name, risk_level, cancer_types, location,
+            top_clinic, recommended_specialist, answers,
+            conflict=conflict,
+            document_type=document_type,
+            document_filename=document_filename,
+        ),
         _generate_family_messages(risk_level, cancer_types, top_clinic, answers),
     )
 
     output = {
-        "greeting": plan_result.get("greeting", _default_greeting(user_name)),
-        "follow_up_plan": plan_result.get("follow_up_plan", _FALLBACK_FOLLOW_UP),
-        "reminder_schedule": plan_result.get("reminder_schedule", _FALLBACK_REMINDERS),
+        "greeting": plan_result.get("greeting", _default_greeting(user_name, conflict, doc_label)),
+        "follow_up_plan": plan_result.get("follow_up_plan", _fallback_follow_up()),
+        "reminder_schedule": plan_result.get("reminder_schedule", _fallback_reminders()),
         "family_message_drafts": messages_result,
+        "conflict_context": {
+            "triggered": bool(conflict),
+            "uncertain": bool(conflict.get("uncertain")) if conflict else False,
+            "original_score": conflict.get("original_score") if conflict else None,
+            "new_score": conflict.get("new_score") if conflict else None,
+            "document_type": document_type or None,
+            "document_filename": document_filename or None,
+        },
     }
 
     completed = list(session.get("completed_agents") or [])
     if "companion_agent" not in completed:
         completed.append("companion_agent")
+
+    # Re-read before persisting. A reconciliation may have escalated the risk
+    # (and invalidated companion_output) while we were calling Gemini. If the
+    # score changed under us, this plan was built from a now-stale risk level,
+    # so discard it and let the next request regenerate against the new score.
+    latest = await get_session(session_id)
+    if latest:
+        latest_score = (latest.get("risk_profile") or {}).get("risk_level", risk_level)
+        if latest_score != risk_level:
+            return latest.get("companion_output")
 
     await update_session(session_id, {"companion_output": output, "completed_agents": completed})
     return output
@@ -138,6 +161,9 @@ async def _generate_plan(
     clinic: Optional[dict],
     specialist: str,
     answers: dict,
+    conflict: Optional[dict] = None,
+    document_type: str = "",
+    document_filename: str = "",
 ) -> dict:
     person_context = _build_person_context(answers, risk_level, cancer_types)
     types_text = " and ".join(cancer_types) if cancer_types else "cancer"
@@ -149,6 +175,39 @@ async def _generate_plan(
     )
     name_line = f"Their name is {user_name}." if user_name else ""
 
+    doc_label = document_filename or document_type or "uploaded medical document"
+
+    if conflict and conflict.get("uncertain"):
+        escalation_context = (
+            f"\nIMPORTANT CONTEXT: This person uploaded their {doc_label}, which surfaced "
+            f"findings that are mixed and need a specialist to review. Their risk level has NOT "
+            f"changed, so do NOT say it was updated or escalated. The greeting MUST acknowledge "
+            f"the {doc_label} and that a specialist should review these findings. The plan steps "
+            f"should prioritise booking a specialist review soon."
+        )
+        urgency_note = (
+            f"This person's {doc_label} surfaced uncertain findings. "
+            f"The first step must be to book a specialist review within 1 week."
+        )
+    elif conflict:
+        original = conflict.get("original_score", "Moderate")
+        new_score = conflict.get("new_score", risk_level)
+        escalation_context = (
+            f"\nIMPORTANT CONTEXT: This person's risk was recently updated. "
+            f"Their initial profile indicated {original} risk. After uploading their {doc_label}, "
+            f"VERA re-assessed and updated the risk to {new_score}. "
+            f"The greeting MUST acknowledge this change and specifically name the document ({doc_label}) "
+            f"that triggered it. The plan steps should reflect the urgency of {new_score} risk, "
+            f"not routine screening timelines."
+        )
+        urgency_note = (
+            f"This person's risk was escalated to {new_score} based on their {doc_label}. "
+            f"Action steps must be urgent, with first step within 1 week."
+        )
+    else:
+        escalation_context = ""
+        urgency_note = f"Schedule follow-up steps appropriately for {risk_level} risk over 6 weeks."
+
     prompt = f"""Create a warm, personalised cancer screening follow-up plan for a real person.
 
 {name_line}
@@ -157,14 +216,15 @@ Person profile:
 
 Recommended specialist: {specialist}
 {clinic_info}
-Today's date: {_CURRENT_DATE}.
+Today's date: {_today()}.
+{escalation_context}
 
 The plan must feel personal. Reference their specific risk type ({types_text}) and their location ({location}).
-Use "you" and "your" throughout.
+Use "you" and "your" throughout. {urgency_note}
 
 Return ONLY this JSON. No markdown:
 {{
-  "greeting": "1-2 warm sentences acknowledging their specific situation. Reference their name if given, their cancer risk type, and that taking this step shows courage. No em dashes.",
+  "greeting": "1-2 warm sentences. If risk was escalated, acknowledge the specific document ({doc_label}) that changed the picture and what it means. Otherwise acknowledge their specific situation. Reference their name if given. No em dashes.",
   "follow_up_plan": [
     {{
       "date": "YYYY-MM-DD",
@@ -181,7 +241,7 @@ Return ONLY this JSON. No markdown:
   ]
 }}
 
-Include 3 to 4 follow-up steps over 6 weeks. Include 3 reminder messages at key moments."""
+Include 3 to 4 follow-up steps. Include 3 reminder messages at key moments."""
 
     try:
         raw = await gemini.generate(prompt)
@@ -194,9 +254,9 @@ Include 3 to 4 follow-up steps over 6 weeks. Include 3 reminder messages at key 
         return json.loads(text.strip())
     except Exception:
         return {
-            "greeting": _default_greeting(user_name),
-            "follow_up_plan": _FALLBACK_FOLLOW_UP,
-            "reminder_schedule": _FALLBACK_REMINDERS,
+            "greeting": _default_greeting(user_name, conflict, doc_label),
+            "follow_up_plan": _fallback_follow_up(),
+            "reminder_schedule": _fallback_reminders(),
         }
 
 
@@ -251,9 +311,25 @@ Return ONLY this JSON. No markdown:
         return _FALLBACK_MESSAGES
 
 
-def _default_greeting(user_name: str) -> str:
+def _default_greeting(user_name: str, conflict: Optional[dict] = None, doc_label: str = "") -> str:
     name = f" {user_name}" if user_name else ""
+    if conflict and conflict.get("uncertain"):
+        doc = doc_label or "your uploaded report"
+        return (
+            f"Hi{name}, your {doc} surfaced some findings that need a closer look. "
+            "Your risk level has not changed, but I have put together a plan so a "
+            "specialist can review these findings with you soon."
+        )
+    if conflict:
+        original = conflict.get("original_score", "Moderate")
+        new_score = conflict.get("new_score", "High")
+        doc = doc_label or "your uploaded report"
+        return (
+            f"Hi{name}, your {doc} has given me a clearer picture of your situation. "
+            f"Based on what it showed, I have updated your risk from {original} to {new_score}. "
+            "I have put together an updated plan so you can take the right next steps quickly."
+        )
     return (
         f"Hi{name}, taking this step for your health took real courage. "
-        "I've put together a simple plan to help you move from awareness to action."
+        "I have put together a simple plan to help you move from awareness to action."
     )

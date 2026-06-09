@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { generateFollowup, simulateCheckin } from "@/lib/api";
+import { generateFollowup } from "@/lib/api";
 import type { CompanionOutput, FollowUpItem } from "@/lib/api";
 
 const LANG_LABELS: Record<string, string> = {
@@ -17,8 +17,6 @@ export default function CompanionPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeLang, setActiveLang] = useState<string>("en");
   const [copied, setCopied] = useState(false);
-  const [checkinLoading, setCheckinLoading] = useState(false);
-  const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -39,21 +37,6 @@ export default function CompanionPage() {
     }
     load();
   }, []);
-
-  async function handleSimulate() {
-    const sid = localStorage.getItem("vera_session_id");
-    if (!sid) return;
-    setCheckinLoading(true);
-    setCheckinMessage(null);
-    try {
-      const result = await simulateCheckin(sid);
-      setCheckinMessage(result.checkin_message);
-    } catch {
-      setCheckinMessage("Hi, just checking in. It's been a few days. Have you had a chance to book your screening?");
-    } finally {
-      setCheckinLoading(false);
-    }
-  }
 
   async function handleCopy(text: string) {
     try {
@@ -98,6 +81,34 @@ export default function CompanionPage() {
           </p>
           <p className="text-base leading-relaxed">{output.greeting}</p>
         </div>
+
+        {/* Escalation banner — shown when a document triggered a risk change */}
+        {output.conflict_context?.triggered && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-5" role="alert">
+            <p className="text-xs font-semibold text-red-700 uppercase tracking-widest mb-1">
+              {output.conflict_context.uncertain ? "Findings to review" : "Risk updated"}
+            </p>
+            <p className="text-sm text-red-900 leading-relaxed">
+              Your{" "}
+              <span className="font-semibold">
+                {output.conflict_context.document_filename || output.conflict_context.document_type || "uploaded report"}
+              </span>{" "}
+              {output.conflict_context.uncertain ? (
+                <>
+                  surfaced findings that need a specialist to review. Your risk level
+                  has not changed, but your plan below helps you arrange that review.
+                </>
+              ) : (
+                <>
+                  changed your risk from{" "}
+                  <span className="font-semibold">{output.conflict_context.original_score}</span> to{" "}
+                  <span className="font-semibold">{output.conflict_context.new_score}</span>. Your plan
+                  below reflects this updated picture.
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
         {/* Follow-up plan */}
         {output.follow_up_plan.length > 0 && (
@@ -247,43 +258,13 @@ export default function CompanionPage() {
           </div>
         )}
 
-        {/* Final note */}
-        {/* Simulate 3 Days Later — demo button */}
+        {/* Closing note */}
         <div className="bg-teal-50 rounded-2xl border border-teal-100 p-5">
-          <p className="text-sm text-teal-800 leading-relaxed text-center mb-4">
+          <p className="text-sm text-teal-800 leading-relaxed text-center">
             VERA will be here whenever you need to revisit your plan, ask more
             questions, or find a new clinic. You are not alone in this.
           </p>
-          <button
-            onClick={handleSimulate}
-            disabled={checkinLoading}
-            className="w-full border-2 border-teal-300 text-teal-800 font-medium py-3 rounded-full text-sm hover:bg-teal-100 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-          >
-            {checkinLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-teal-400 border-t-teal-700 rounded-full animate-spin" />
-                Simulating…
-              </>
-            ) : (
-              "⏩ Simulate 3 Days Later"
-            )}
-          </button>
         </div>
-
-        {/* Check-in message card */}
-        {checkinMessage && (
-          <div className="bg-teal-800 text-white rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                V
-              </div>
-              <p className="text-xs text-teal-300 font-medium">
-                VERA · 3 days later
-              </p>
-            </div>
-            <p className="text-sm leading-relaxed">{checkinMessage}</p>
-          </div>
-        )}
 
         <Link
           href="/"
