@@ -44,11 +44,11 @@ async def simulate_checkin(body: FollowupRequest):
 
     name_clause = f" {user_name}," if user_name else ","
     prompt = (
-        f"You are VERA, a warm women's health AI companion. "
+        f"You are VERA, a warm health AI companion. "
         f"It has been 3 days since{name_clause} you completed your cancer risk assessment showing {risk_level} risk. "
         f"Your next step was to: {next_action}. "
-        f"Write a warm, brief 2-sentence proactive check-in message asking how she is doing and whether she has been able to take that step. "
-        f"Do not repeat the full plan. Be warm and personal."
+        f"Write a warm, brief 2-sentence proactive check-in message asking how they are doing and whether they have been able to take that step. "
+        f"Do not repeat the full plan. Be warm and personal. No em dashes."
     )
     message = await gemini.generate_safe(
         prompt,

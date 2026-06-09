@@ -4,6 +4,7 @@ Uses Gemini 2.0 Flash for structured medical risk assessment and plain-language 
 """
 
 import asyncio
+import datetime
 import json
 import logging
 from typing import Optional
@@ -14,7 +15,8 @@ from .questions import QUESTIONS, format_question
 
 logger = logging.getLogger(__name__)
 
-CURRENT_YEAR = 2026
+def _current_year() -> int:
+    return datetime.date.today().year
 _VALID_LEVELS = {"Low", "Moderate", "High", "Urgent"}
 
 _FALLBACK_SUMMARY = (
@@ -92,6 +94,10 @@ async def reconcile(session_id: str) -> Optional[dict]:
             "original_score": original_score,
             "new_score": verdict["final_score"],
             "reason": verdict.get("reason", ""),
+            # Verdict C keeps the same score but flags uncertainty, so the score
+            # did not actually change. Downstream copy uses this to avoid saying
+            # "updated from Moderate to Moderate".
+            "uncertain": bool(verdict.get("uncertain")) or verdict["final_score"] == original_score,
             "shown_to_user": False,
         }
 
@@ -106,10 +112,15 @@ async def reconcile(session_id: str) -> Optional[dict]:
 
     updated_risk_profile = {**risk_profile, "risk_level": verdict["final_score"]}
 
-    await update_session(session_id, {
+    update_payload: dict = {
         "risk_assessment": updated_risk_assessment,
         "risk_profile": updated_risk_profile,
-    })
+    }
+    # Invalidate any cached companion plan so it regenerates with updated risk context
+    if verdict.get("conflict"):
+        update_payload["companion_output"] = None
+
+    await update_session(session_id, update_payload)
 
     return {
         "reconciled": True,
@@ -463,14 +474,14 @@ def _build_timeline(answers: dict) -> list[dict]:
     if last_year:
         timeline.append({"year": last_year, "event": "Last cancer screening", "status": "completed"})
         missed = last_year + 3
-        while missed < CURRENT_YEAR:
+        while missed < _current_year():
             timeline.append({"year": missed, "event": f"Recommended {primary_screening}", "status": "missed"})
             missed += 3
     else:
         timeline.append({"year": 2020, "event": "First recommended screening (not completed)", "status": "missed"})
         timeline.append({"year": 2023, "event": f"Recommended {primary_screening}", "status": "missed"})
 
-    timeline.append({"year": CURRENT_YEAR, "event": "Now. VERA recommends action.", "status": "urgent"})
+    timeline.append({"year": _current_year(), "event": "Now. VERA recommends action.", "status": "urgent"})
     return timeline
 
 

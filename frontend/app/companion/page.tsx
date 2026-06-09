@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { generateFollowup, simulateCheckin } from "@/lib/api";
+import { generateFollowup } from "@/lib/api";
 import type { CompanionOutput, FollowUpItem } from "@/lib/api";
 
 const LANG_LABELS: Record<string, string> = {
@@ -17,8 +17,6 @@ export default function CompanionPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeLang, setActiveLang] = useState<string>("en");
   const [copied, setCopied] = useState(false);
-  const [checkinLoading, setCheckinLoading] = useState(false);
-  const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -39,21 +37,6 @@ export default function CompanionPage() {
     }
     load();
   }, []);
-
-  async function handleSimulate() {
-    const sid = localStorage.getItem("vera_session_id");
-    if (!sid) return;
-    setCheckinLoading(true);
-    setCheckinMessage(null);
-    try {
-      const result = await simulateCheckin(sid);
-      setCheckinMessage(result.checkin_message);
-    } catch {
-      setCheckinMessage("Hi, just checking in. It's been a few days. Have you had a chance to book your screening?");
-    } finally {
-      setCheckinLoading(false);
-    }
-  }
 
   async function handleCopy(text: string) {
     try {
@@ -79,7 +62,7 @@ export default function CompanionPage() {
     <div className="min-h-screen bg-stone-50">
       <header className="bg-teal-900 text-white px-6 py-4 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center font-bold text-xs">
+          <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center font-bold text-xs" aria-hidden="true">
             V
           </div>
           <div>
@@ -89,7 +72,8 @@ export default function CompanionPage() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+      <main id="main-content" className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+        <h1 className="sr-only">Your Companion Plan</h1>
         {/* Greeting */}
         <div className="bg-teal-800 text-white rounded-2xl p-6 shadow-sm">
           <p className="text-xs text-teal-300 uppercase tracking-widest mb-2">
@@ -97,6 +81,34 @@ export default function CompanionPage() {
           </p>
           <p className="text-base leading-relaxed">{output.greeting}</p>
         </div>
+
+        {/* Escalation banner — shown when a document triggered a risk change */}
+        {output.conflict_context?.triggered && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-5" role="alert">
+            <p className="text-xs font-semibold text-red-700 uppercase tracking-widest mb-1">
+              {output.conflict_context.uncertain ? "Findings to review" : "Risk updated"}
+            </p>
+            <p className="text-sm text-red-900 leading-relaxed">
+              Your{" "}
+              <span className="font-semibold">
+                {output.conflict_context.document_filename || output.conflict_context.document_type || "uploaded report"}
+              </span>{" "}
+              {output.conflict_context.uncertain ? (
+                <>
+                  surfaced findings that need a specialist to review. Your risk level
+                  has not changed, but your plan below helps you arrange that review.
+                </>
+              ) : (
+                <>
+                  changed your risk from{" "}
+                  <span className="font-semibold">{output.conflict_context.original_score}</span> to{" "}
+                  <span className="font-semibold">{output.conflict_context.new_score}</span>. Your plan
+                  below reflects this updated picture.
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
         {/* Follow-up plan */}
         {output.follow_up_plan.length > 0 && (
@@ -173,12 +185,16 @@ export default function CompanionPage() {
             </p>
 
             {/* Language tabs */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4" role="tablist" aria-label="Message language">
               {messageLangs.map((lang) => (
                 <button
                   key={lang}
                   onClick={() => setActiveLang(lang)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  role="tab"
+                  aria-selected={activeLang === lang}
+                  aria-controls="message-tabpanel"
+                  id={`tab-${lang}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[44px] min-w-[44px] ${
                     activeLang === lang
                       ? "bg-teal-800 text-white"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -190,14 +206,20 @@ export default function CompanionPage() {
             </div>
 
             {/* Message text */}
-            <div className="bg-stone-50 rounded-xl border border-stone-200 px-4 py-4 relative">
+            <div
+              id="message-tabpanel"
+              role="tabpanel"
+              aria-labelledby={`tab-${activeLang}`}
+              className="bg-stone-50 rounded-xl border border-stone-200 px-4 py-4 relative"
+            >
               <p className="text-sm text-slate-700 leading-relaxed pr-10">
                 {activeMessage}
               </p>
               <button
                 onClick={() => handleCopy(activeMessage)}
-                className="absolute top-3 right-3 text-stone-400 hover:text-teal-700 transition-colors"
-                title="Copy message"
+                className="absolute top-3 right-3 text-stone-400 hover:text-teal-700 transition-colors w-11 h-11 flex items-center justify-center rounded"
+                aria-label={copied ? "Message copied to clipboard" : "Copy message to clipboard"}
+                aria-live="polite"
               >
                 {copied ? (
                   <svg
@@ -236,43 +258,13 @@ export default function CompanionPage() {
           </div>
         )}
 
-        {/* Final note */}
-        {/* Simulate 3 Days Later — demo button */}
+        {/* Closing note */}
         <div className="bg-teal-50 rounded-2xl border border-teal-100 p-5">
-          <p className="text-sm text-teal-800 leading-relaxed text-center mb-4">
+          <p className="text-sm text-teal-800 leading-relaxed text-center">
             VERA will be here whenever you need to revisit your plan, ask more
             questions, or find a new clinic. You are not alone in this.
           </p>
-          <button
-            onClick={handleSimulate}
-            disabled={checkinLoading}
-            className="w-full border-2 border-teal-300 text-teal-800 font-medium py-3 rounded-full text-sm hover:bg-teal-100 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-          >
-            {checkinLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-teal-400 border-t-teal-700 rounded-full animate-spin" />
-                Simulating…
-              </>
-            ) : (
-              "⏩ Simulate 3 Days Later"
-            )}
-          </button>
         </div>
-
-        {/* Check-in message card */}
-        {checkinMessage && (
-          <div className="bg-teal-800 text-white rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                V
-              </div>
-              <p className="text-xs text-teal-300 font-medium">
-                VERA · 3 days later
-              </p>
-            </div>
-            <p className="text-sm leading-relaxed">{checkinMessage}</p>
-          </div>
-        )}
 
         <Link
           href="/"
@@ -280,7 +272,7 @@ export default function CompanionPage() {
         >
           ← Back to home
         </Link>
-      </div>
+      </main>
     </div>
   );
 }

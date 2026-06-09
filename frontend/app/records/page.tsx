@@ -139,7 +139,7 @@ export default function RecordsPage() {
 
       <Navbar />
 
-      <main className="pt-32 pb-stack-lg max-w-[800px] mx-auto px-container-padding-mobile md:px-container-padding-desktop">
+      <main id="main-content" className="pt-32 pb-stack-lg max-w-[800px] mx-auto px-container-padding-mobile md:px-container-padding-desktop">
 
         {/* Hero */}
         <div className="space-y-6 mb-stack-lg">
@@ -217,8 +217,8 @@ export default function RecordsPage() {
 
           {/* Processing state */}
           {(uploading || reconciling) && (
-            <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant p-8 text-center soft-elevation">
-              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+            <div role="status" aria-live="polite" className="bg-surface-container-lowest rounded-2xl border border-outline-variant p-8 text-center soft-elevation">
+              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" aria-hidden="true" />
               <p className="text-body-md text-on-surface font-medium">
                 {uploading ? "I am reading your document..." : "Updating your risk profile..."}
               </p>
@@ -230,19 +230,28 @@ export default function RecordsPage() {
 
           {/* Conflict card */}
           {reconcile?.conflict && (
-            <div className="bg-error-container/20 border-2 border-error/40 rounded-2xl p-6 soft-elevation">
+            <div role="alert" className="bg-error-container/20 border-2 border-error/40 rounded-2xl p-6 soft-elevation">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-2.5 h-2.5 rounded-full bg-error animate-pulse" aria-hidden="true" />
                 <p className="text-label-md font-bold text-error uppercase tracking-widest">
-                  Assessment Updated
+                  {reconcile.uncertain ? "Findings to Review" : "Assessment Updated"}
                 </p>
               </div>
-              <p className="text-body-lg text-on-surface leading-relaxed mb-4">
-                Your initial profile suggested{" "}
-                <span className="font-semibold">{reconcile.original_score}</span>{" "}
-                risk. Your {output?.explanation.document_type ?? "document"} has changed that picture. I now consider your risk to be{" "}
-                <span className="font-bold text-error">{reconcile.new_score}</span>.
-              </p>
+              {reconcile.uncertain ? (
+                <p className="text-body-lg text-on-surface leading-relaxed mb-4">
+                  Your {output?.explanation.document_type ?? "document"} surfaced findings that
+                  need a specialist to review. Your risk level stays{" "}
+                  <span className="font-semibold">{reconcile.new_score}</span> for now, and I
+                  recommend a follow-up to get a clearer picture.
+                </p>
+              ) : (
+                <p className="text-body-lg text-on-surface leading-relaxed mb-4">
+                  Your initial profile suggested{" "}
+                  <span className="font-semibold">{reconcile.original_score}</span>{" "}
+                  risk. Your {output?.explanation.document_type ?? "document"} has changed that picture. I now consider your risk to be{" "}
+                  <span className="font-bold text-error">{reconcile.new_score}</span>.
+                </p>
+              )}
               {reconcile.reason && (
                 <p className="text-body-md text-on-surface-variant leading-relaxed mb-5 bg-surface-container-lowest rounded-xl px-4 py-3 border border-error/20">
                   {reconcile.reason}

@@ -13,7 +13,7 @@ export default function Home() {
         </StartAssessmentButton>
       } />
 
-      <main className="pt-20">
+      <main id="main-content" className="pt-20">
 
         {/* ── Hero Section ─────────────────────────────────────────── */}
         <section className="relative overflow-hidden py-stack-lg md:py-32">

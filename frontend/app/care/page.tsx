@@ -92,8 +92,8 @@ export default function CarePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+        <div role="status" aria-live="polite" className="text-center">
+          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" aria-hidden="true" />
           <p className="text-body-md text-on-surface-variant">Finding clinics and hospitals near you...</p>
           <p className="text-label-md text-on-surface-variant/60 mt-2">This may take a moment</p>
         </div>
@@ -119,7 +119,7 @@ export default function CarePage() {
 
       <Navbar />
 
-      <main className="pt-32 pb-stack-lg max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop">
+      <main id="main-content" className="pt-32 pb-stack-lg max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop">
 
         {/* Hero */}
         <div className="space-y-6 mb-stack-lg">
@@ -224,6 +224,26 @@ export default function CarePage() {
           </div>
         </section>
 
+        {/* Companion CTA */}
+        <div className="mt-stack-lg bg-teal-800 text-white rounded-3xl p-8 flex flex-col md:flex-row items-center gap-6">
+          <div className="flex-shrink-0 w-14 h-14 rounded-full bg-teal-600 flex items-center justify-center">
+            <span className="material-symbols-outlined text-3xl" aria-hidden="true">calendar_month</span>
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h2 className="text-headline-md mb-1">Your follow-up plan is ready</h2>
+            <p className="text-body-md text-teal-200 leading-relaxed">
+              VERA has prepared a personalised action plan with reminders, next steps, and a message you can share with someone you trust.
+            </p>
+          </div>
+          <Link
+            href="/companion"
+            className="flex-shrink-0 bg-white text-teal-900 font-bold px-6 py-3 rounded-xl text-label-md hover:bg-teal-50 transition-colors min-w-[180px] text-center"
+            aria-label="View your companion follow-up plan"
+          >
+            View my plan
+          </Link>
+        </div>
+
         {/* Disclaimer */}
         <p className="text-label-sm text-on-surface-variant text-center mt-stack-md leading-relaxed px-4">
           VERA provides health navigation only. Always verify availability directly with the facility. Consult a qualified doctor before making health decisions.
@@ -308,7 +328,7 @@ function ClinicCard({ clinic, isTopMatch }: { clinic: Clinic; isTopMatch: boolea
         {clinic.contact && (
           <a
             href={`tel:${clinic.contact}`}
-            className="px-4 py-2.5 border border-primary text-primary rounded-xl flex items-center justify-center hover:bg-primary/5 transition-colors"
+            className="min-h-[44px] min-w-[44px] px-4 py-2.5 border border-primary text-primary rounded-xl flex items-center justify-center hover:bg-primary/5 transition-colors"
             aria-label={`Call ${clinic.name}`}
           >
             <span className="material-symbols-outlined" aria-hidden="true">call</span>

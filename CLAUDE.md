@@ -545,48 +545,6 @@ Backend session still stores `language: "en"`. Agent prompts include it in case 
 
 ---
 
-## Demo Personas
-
-**Persona 1 — Primary demo persona**
-45-year-old male, smoker, family history of colorectal cancer
-Initial score: MEDIUM
-Uploads colonoscopy report with abnormal finding
-Conflict fires, score becomes HIGH
-Agent 2 routes to Gastroenterologist + Ayushman Bharat
-
-**Persona 2**
-38-year-old woman, family history of breast cancer, no prior screening
-Score: HIGH from profile alone
-Agent 2 routes to Oncologist
-No conflict scenario — straight path demo
-
-**Persona 3 — Post-diagnosis**
-User on chemotherapy
-Agent 4 demo: medication reminders + follow-up
-"Simulate 3 Days Later" button
-
----
-
-## Demo Flow (7 Minutes)
-
-| Minute | What Happens |
-|---|---|
-| 0:00 to 0:30 | Landing page — click "Start Assessment" |
-| 0:30 to 1:00 | Signup (/signup): Name, DOB, Gender, Height, Weight, Location |
-| 1:00 to 2:00 | Assessment (/assessment): 6 AI-generated questions, card UI, progress indicator |
-| 2:00 to 2:30 | Risk profile (/risk): MEDIUM, plain-language reasoning shown |
-| 2:30 to 3:30 | Agent 2: government scheme + nearest specialist shown |
-| 3:30 to 4:30 | Upload lab report: Agent 3 explains in plain language |
-| 4:30 to 5:00 | Conflict card fires: MEDIUM becomes HIGH. This is the centrepiece. |
-| 5:00 to 5:30 | Updated care plan: Gastroenterologist + urgent scheme |
-| 5:30 to 6:00 | "Simulate 3 Days Later": Agent 4 proactive check-in |
-| 6:00 to 6:30 | Download care plan PDF. Share with doctor. |
-| 6:30 to 7:00 | Q&A buffer |
-
-**The conflict card at 4:30 is the centrepiece. Everything else supports it.**
-
----
-
 ## What VERA Is NOT — Do Not Drift
 
 - Not a diagnostic tool

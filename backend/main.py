@@ -75,9 +75,9 @@ class SignupRequest(BaseModel):
     gender: str = Field(..., pattern="^(female|male|other)$")
     location: str = Field(..., min_length=1, max_length=200)
     language: str = Field(default="en", pattern=_SUPPORTED_LANGUAGES)
-    height_cm: Optional[int] = Field(default=None)
-    weight_kg: Optional[int] = Field(default=None)
-    date_of_birth: Optional[str] = Field(default=None)
+    height_cm: Optional[float] = Field(default=None, ge=0, le=300)
+    weight_kg: Optional[float] = Field(default=None, ge=0, le=700)
+    date_of_birth: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 @app.post("/session", tags=["Session"], status_code=201)

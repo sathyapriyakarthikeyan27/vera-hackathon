@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 const NAV_ITEMS = [
   { label: "Assessment", href: "/assessment" },
@@ -24,6 +25,7 @@ function VeraLogo() {
 
 export function Navbar({ right }: { right?: React.ReactNode }) {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <header className="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-outline-variant/20">
@@ -32,6 +34,7 @@ export function Navbar({ right }: { right?: React.ReactNode }) {
           <VeraLogo />
         </Link>
 
+        {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-8" aria-label="Main navigation">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
@@ -55,12 +58,52 @@ export function Navbar({ right }: { right?: React.ReactNode }) {
           })}
         </nav>
 
-        {right && (
-          <div className="flex items-center">
-            {right}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {right && <div className="flex items-center">{right}</div>}
+
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            className="md:hidden flex items-center justify-center w-11 h-11 rounded-full hover:bg-surface-container transition-colors"
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-nav"
+            onClick={() => setMobileOpen((o) => !o)}
+          >
+            <span className="material-symbols-outlined text-on-surface" aria-hidden="true">
+              {mobileOpen ? "close" : "menu"}
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* Mobile nav drawer */}
+      {mobileOpen && (
+        <nav
+          id="mobile-nav"
+          aria-label="Mobile navigation"
+          className="md:hidden bg-surface border-t border-outline-variant/20 px-container-padding-mobile py-4 flex flex-col gap-1"
+        >
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={`px-4 py-3 rounded-xl text-label-md transition-colors ${
+                  isActive
+                    ? "bg-primary-fixed/30 text-primary font-bold"
+                    : "text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+                }`}
+                aria-current={isActive ? "page" : undefined}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </header>
   );
 }
