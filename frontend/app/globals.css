@@ -192,3 +192,32 @@ body {
 .vera-dot {
   animation: vera-pulse 1.2s ease-in-out infinite;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   FOCUS VISIBLE — ensure keyboard focus rings are always visible
+───────────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Remove outline only when not keyboard-navigating */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   REDUCED MOTION — respect user preferences
+───────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

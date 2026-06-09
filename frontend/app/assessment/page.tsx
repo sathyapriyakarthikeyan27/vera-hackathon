@@ -103,8 +103,8 @@ export default function AssessmentPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+        <div role="status" aria-live="polite" className="text-center">
+          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" aria-hidden="true" />
           <p className="text-body-md text-on-surface-variant">Preparing your assessment...</p>
         </div>
       </div>
@@ -134,7 +134,7 @@ export default function AssessmentPage() {
         </div>
       } />
 
-      <main className="pt-24 pb-stack-lg min-h-screen">
+      <main id="main-content" className="pt-24 pb-stack-lg min-h-screen">
 
         {/* Progress bar */}
         <div className="max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop mt-stack-md">
@@ -142,7 +142,14 @@ export default function AssessmentPage() {
             <span className="text-label-md text-primary font-bold">Step {currentStep} of {TOTAL_STEPS}</span>
             <span className="text-label-md text-on-surface-variant">{progressPercent}% Complete</span>
           </div>
-          <div className="w-full h-3 bg-surface-container-highest rounded-full overflow-hidden">
+          <div
+            className="w-full h-3 bg-surface-container-highest rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Assessment progress: step ${currentStep} of ${TOTAL_STEPS}`}
+          >
             <div
               className="h-full bg-primary-container rounded-full transition-all duration-500"
               style={{ width: `${Math.max(progressPercent, 4)}%`, boxShadow: "0 0 12px rgba(45, 125, 154, 0.3)" }}
@@ -154,7 +161,7 @@ export default function AssessmentPage() {
         <section className="max-w-[800px] mx-auto px-container-padding-mobile md:px-container-padding-desktop mt-stack-lg">
 
           <div className="mb-8">
-            <h1 className="text-headline-lg-mobile md:text-headline-lg text-on-surface mb-3">
+            <h1 id="question-heading" className="text-headline-lg-mobile md:text-headline-lg text-on-surface mb-3">
               {question.question}
             </h1>
             {question.optional && (
@@ -166,7 +173,7 @@ export default function AssessmentPage() {
 
           {/* Choice options */}
           {question.type === "choice" && question.options && question.options.length > 0 && (
-            <div className="grid grid-cols-1 gap-4">
+            <div role="radiogroup" aria-labelledby="question-heading" className="grid grid-cols-1 gap-4">
               {question.options.map((opt) => {
                 const isSelected = selectedValue === opt.value;
                 return (
@@ -174,6 +181,8 @@ export default function AssessmentPage() {
                     key={opt.value}
                     onClick={() => handleAnswer(opt.value)}
                     disabled={isSubmitting}
+                    role="radio"
+                    aria-checked={isSelected}
                     className={`group flex items-center p-6 bg-surface-container-lowest border rounded-xl text-left transition-all duration-200 disabled:cursor-not-allowed ${
                       isSelected
                         ? "border-primary bg-primary-fixed/20"
@@ -212,9 +221,17 @@ export default function AssessmentPage() {
                 onChange={(e) => setTextAnswer(e.target.value)}
                 placeholder={question.placeholder || "Share any symptoms or health concerns..."}
                 rows={4}
+                id="text-answer"
+                aria-label={question.question}
+                aria-describedby={question.optional ? "text-answer-hint" : undefined}
                 className="w-full rounded-xl border border-outline bg-surface-container-low px-4 py-3 text-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary/10 resize-none transition-all"
                 autoFocus
               />
+              {question.optional && (
+                <p id="text-answer-hint" className="sr-only">
+                  This question is optional. You can skip it.
+                </p>
+              )}
               <div className="flex items-center gap-4">
                 <button
                   type="submit"
@@ -278,15 +295,6 @@ export default function AssessmentPage() {
           )}
         </section>
 
-        {/* Decorative image */}
-        <div className="max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop mt-stack-lg opacity-30">
-          <img
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwqo1_IdrBINEIKKlRUW_VGhhJiPsiesDPMctkNummzL6nOnw28zf3zA9JQF1ufGwy26eECITw6e0MobxOyKFuZzUhe1SWYVwh1fqwH9Cl7Ydz9v-mgnwW3ItgVZKnsUuGPNnrPfQ_aV7MriprJ9JSqL7YsOttyaxKrAkrDcY3pqFDl1SoF2LgnZobyIfBGbtkGK8viCTmR2oAvFPsaH4xnZx2YMSl19-qMHRqiBCZBMPfBCy6vSNwjhJBooh2Ia_-QM9eFUrOwVYa"
-            alt=""
-            aria-hidden="true"
-            className="w-full h-48 object-cover rounded-3xl mix-blend-multiply"
-          />
-        </div>
       </main>
 
       <Footer />

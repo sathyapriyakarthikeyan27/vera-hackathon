@@ -224,7 +224,8 @@ export default function ChatPage() {
         </aside>
 
         {/* ── Chat area ── */}
-        <section className="flex-1 flex flex-col overflow-hidden">
+        <main id="main-content" className="flex-1 flex flex-col overflow-hidden">
+          <h1 className="sr-only">Chat with VERA</h1>
 
           {/* Disclaimer bar */}
           <div className="bg-secondary-container/20 px-6 py-2.5 flex items-center justify-center gap-2 border-b border-secondary-container/40 flex-shrink-0">
@@ -235,7 +236,13 @@ export default function ChatPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 md:px-10 py-8 space-y-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#bfc8cd transparent" }}>
+          <div
+            role="log"
+            aria-live="polite"
+            aria-label="Conversation with VERA"
+            className="flex-1 overflow-y-auto px-4 md:px-10 py-8 space-y-6"
+            style={{ scrollbarWidth: "thin", scrollbarColor: "#bfc8cd transparent" }}
+          >
 
             {/* Welcome header */}
             <div className="flex flex-col items-center mb-6">
@@ -289,7 +296,7 @@ export default function ChatPage() {
 
             {/* Typing indicator */}
             {isTyping && (
-              <div className="flex items-start gap-3 max-w-2xl">
+              <div className="flex items-start gap-3 max-w-2xl" aria-label="VERA is typing">
                 <div className="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
                   <span className="material-symbols-outlined text-white" style={{ fontSize: "18px", fontVariationSettings: "'FILL' 1" }} aria-hidden="true">smart_toy</span>
                 </div>
@@ -323,7 +330,7 @@ export default function ChatPage() {
                 <button
                   type="submit"
                   disabled={!input.trim() || isTyping}
-                  className="w-10 h-10 bg-primary-container hover:bg-primary disabled:bg-surface-container-high text-white rounded-full flex items-center justify-center transition-all active:scale-90 disabled:cursor-not-allowed flex-shrink-0"
+                  className="w-11 h-11 bg-primary-container hover:bg-primary disabled:bg-surface-container-high text-white rounded-full flex items-center justify-center transition-all active:scale-90 disabled:cursor-not-allowed flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                   aria-label="Send message"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: "20px", fontVariationSettings: "'FILL' 1" }} aria-hidden="true">send</span>
@@ -335,7 +342,7 @@ export default function ChatPage() {
             </form>
           </div>
 
-        </section>
+        </main>
       </div>
     </div>
   );

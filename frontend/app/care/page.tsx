@@ -92,8 +92,8 @@ export default function CarePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+        <div role="status" aria-live="polite" className="text-center">
+          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" aria-hidden="true" />
           <p className="text-body-md text-on-surface-variant">Finding clinics and hospitals near you...</p>
           <p className="text-label-md text-on-surface-variant/60 mt-2">This may take a moment</p>
         </div>
@@ -119,7 +119,7 @@ export default function CarePage() {
 
       <Navbar />
 
-      <main className="pt-32 pb-stack-lg max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop">
+      <main id="main-content" className="pt-32 pb-stack-lg max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop">
 
         {/* Hero */}
         <div className="space-y-6 mb-stack-lg">
@@ -308,7 +308,7 @@ function ClinicCard({ clinic, isTopMatch }: { clinic: Clinic; isTopMatch: boolea
         {clinic.contact && (
           <a
             href={`tel:${clinic.contact}`}
-            className="px-4 py-2.5 border border-primary text-primary rounded-xl flex items-center justify-center hover:bg-primary/5 transition-colors"
+            className="min-h-[44px] min-w-[44px] px-4 py-2.5 border border-primary text-primary rounded-xl flex items-center justify-center hover:bg-primary/5 transition-colors"
             aria-label={`Call ${clinic.name}`}
           >
             <span className="material-symbols-outlined" aria-hidden="true">call</span>

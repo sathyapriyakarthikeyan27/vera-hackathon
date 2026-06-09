@@ -215,11 +215,15 @@ function CityCombobox({
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={open && matches.length > 0}
+        aria-controls="city-listbox"
+        aria-haspopup="listbox"
         aria-required="true"
       />
       {open && matches.length > 0 && (
         <ul
+          id="city-listbox"
           role="listbox"
+          aria-label="City suggestions"
           className="absolute z-20 w-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden"
           style={{ boxShadow: "0 8px 24px rgba(45,125,154,0.12)" }}
         >
@@ -284,12 +288,6 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-on-primary px-4 py-2 rounded z-50 text-label-md"
-      >
-        Skip to main content
-      </a>
 
       {/* Header — logo only, transactional screen */}
       <header className="w-full py-8 px-container-padding-mobile md:px-container-padding-desktop">

@@ -79,7 +79,7 @@ export default function CompanionPage() {
     <div className="min-h-screen bg-stone-50">
       <header className="bg-teal-900 text-white px-6 py-4 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center font-bold text-xs">
+          <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center font-bold text-xs" aria-hidden="true">
             V
           </div>
           <div>
@@ -89,7 +89,8 @@ export default function CompanionPage() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+      <main id="main-content" className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+        <h1 className="sr-only">Your Companion Plan</h1>
         {/* Greeting */}
         <div className="bg-teal-800 text-white rounded-2xl p-6 shadow-sm">
           <p className="text-xs text-teal-300 uppercase tracking-widest mb-2">
@@ -173,12 +174,16 @@ export default function CompanionPage() {
             </p>
 
             {/* Language tabs */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4" role="tablist" aria-label="Message language">
               {messageLangs.map((lang) => (
                 <button
                   key={lang}
                   onClick={() => setActiveLang(lang)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  role="tab"
+                  aria-selected={activeLang === lang}
+                  aria-controls="message-tabpanel"
+                  id={`tab-${lang}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[44px] min-w-[44px] ${
                     activeLang === lang
                       ? "bg-teal-800 text-white"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -190,14 +195,20 @@ export default function CompanionPage() {
             </div>
 
             {/* Message text */}
-            <div className="bg-stone-50 rounded-xl border border-stone-200 px-4 py-4 relative">
+            <div
+              id="message-tabpanel"
+              role="tabpanel"
+              aria-labelledby={`tab-${activeLang}`}
+              className="bg-stone-50 rounded-xl border border-stone-200 px-4 py-4 relative"
+            >
               <p className="text-sm text-slate-700 leading-relaxed pr-10">
                 {activeMessage}
               </p>
               <button
                 onClick={() => handleCopy(activeMessage)}
-                className="absolute top-3 right-3 text-stone-400 hover:text-teal-700 transition-colors"
-                title="Copy message"
+                className="absolute top-3 right-3 text-stone-400 hover:text-teal-700 transition-colors w-11 h-11 flex items-center justify-center rounded"
+                aria-label={copied ? "Message copied to clipboard" : "Copy message to clipboard"}
+                aria-live="polite"
               >
                 {copied ? (
                   <svg
@@ -280,7 +291,7 @@ export default function CompanionPage() {
         >
           ← Back to home
         </Link>
-      </div>
+      </main>
     </div>
   );
 }
