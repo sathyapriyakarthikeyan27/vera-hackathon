@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 from services.session_store import init_db, create_session, get_session, update_session
 from services.database import close_pool
 from services.gemini import validate_key_on_startup
-from routers import risk, schemes, education, companion, records
+from services import cache
+from routers import risk, schemes, education, companion, records, auth, reminders, notifications
 
 load_dotenv()
 
@@ -23,7 +24,14 @@ async def lifespan(app: FastAPI):
     await init_db()
     from db.seed import seed_scheme_data
     await seed_scheme_data()
+    if await cache.ping():
+        logging.getLogger(__name__).info("STARTUP: Redis LLM cache connected.")
+    else:
+        logging.getLogger(__name__).info(
+            "STARTUP: Redis LLM cache unavailable — running cache-less (fail-open)."
+        )
     yield
+    await cache.close_redis()
     await close_pool()
 
 
@@ -46,11 +54,14 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(risk.router, prefix="/risk", tags=["Risk Profiler"])
 app.include_router(schemes.router, prefix="/schemes", tags=["Scheme Navigator"])
 app.include_router(education.router, prefix="/education", tags=["Education Agent"])
 app.include_router(companion.router, prefix="/companion", tags=["Companion Agent"])
 app.include_router(records.router, prefix="/records", tags=["Records Explainer"])
+app.include_router(reminders.router, prefix="/reminders", tags=["Reminders"])
+app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

@@ -6,6 +6,8 @@ import { getSession } from "@/lib/api";
 import type { VERASession, RiskProfile, RiskAssessmentConflict } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { NotificationPrefsCard } from "@/components/NotificationPrefsCard";
+import { useRequireAuth } from "@/lib/auth";
 
 const MOCK = false; // set to true to use mock data
 
@@ -87,6 +89,7 @@ interface ExtendedRiskProfile extends RiskProfile {
 }
 
 export default function RiskPage() {
+  useRequireAuth();
   const [session, setSession] = useState<VERASession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -286,6 +289,11 @@ export default function RiskPage() {
             </div>
           </div>
 
+        </div>
+
+        {/* Reminder channel setup (non-blocking) */}
+        <div className="mt-stack-md">
+          <NotificationPrefsCard />
         </div>
 
         {/* Disclaimer */}

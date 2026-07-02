@@ -32,6 +32,28 @@ CREATE INDEX IF NOT EXISTS idx_auth_tokens_user   ON auth_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_auth_tokens_expiry ON auth_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
 
+-- Production auth additions (email+password + Google OAuth). Idempotent.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash  VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Broaden auth_tokens types: add refresh / email_verify / password_reset.
+ALTER TABLE auth_tokens DROP CONSTRAINT IF EXISTS auth_tokens_token_type_check;
+ALTER TABLE auth_tokens ADD CONSTRAINT auth_tokens_token_type_check
+    CHECK (token_type IN ('otp', 'session', 'refresh', 'email_verify', 'password_reset'));
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_lookup ON auth_tokens(token_hash, token_type);
+
+-- OAuth provider accounts linked to a user
+CREATE TABLE IF NOT EXISTS oauth_accounts (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider            VARCHAR(50) NOT NULL,
+    provider_account_id VARCHAR(255) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (provider, provider_account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_user ON oauth_accounts(user_id);
+
 -- Sessions: JSONB blob per session, all agent outputs stored here
 CREATE TABLE IF NOT EXISTS sessions (
     session_id       UUID PRIMARY KEY,
@@ -70,6 +92,51 @@ CREATE TABLE IF NOT EXISTS medications (
     frequency       VARCHAR(100),
     active          BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Reminders: Agent 4 notifications (in-app now; email/SMS/WhatsApp in later phases).
+-- Materialized from companion_output.reminder_schedule; deduped by dedupe_key.
+CREATE TABLE IF NOT EXISTS reminders (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    session_id  UUID REFERENCES sessions(session_id) ON DELETE CASCADE,
+    source      VARCHAR(30) NOT NULL DEFAULT 'companion',
+    title       VARCHAR(255),
+    message     TEXT NOT NULL,
+    due_at      TIMESTAMPTZ NOT NULL,
+    status      VARCHAR(20) NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'scheduled', 'sent', 'read', 'dismissed', 'failed')),
+    channels    TEXT[] NOT NULL DEFAULT '{in_app}',
+    dedupe_key  VARCHAR(64) UNIQUE,
+    attempts    INT NOT NULL DEFAULT 0,
+    last_error  TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    sent_at     TIMESTAMPTZ,
+    read_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, due_at);
+CREATE INDEX IF NOT EXISTS idx_reminders_due  ON reminders(status, due_at);
+
+-- Add 'scheduled' status to reminders created before Celery dispatch existed.
+ALTER TABLE reminders DROP CONSTRAINT IF EXISTS reminders_status_check;
+ALTER TABLE reminders ADD CONSTRAINT reminders_status_check
+    CHECK (status IN ('pending', 'scheduled', 'sent', 'read', 'dismissed', 'failed'));
+
+-- Notification preferences: per-user channel opt-in, contact, consent, timezone.
+-- Email channel uses the account email (users.email / users.email_verified);
+-- phone is verified here via OTP. PII (phone) — never logged, never cached.
+CREATE TABLE IF NOT EXISTS notification_preferences (
+    user_id           UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    channel_optin     JSONB NOT NULL DEFAULT '{"in_app": true, "email": false, "sms": false, "whatsapp": false}',
+    phone_e164        VARCHAR(20),
+    phone_verified    BOOLEAN NOT NULL DEFAULT FALSE,
+    timezone          VARCHAR(64) NOT NULL DEFAULT 'UTC',
+    quiet_hours_start SMALLINT,
+    quiet_hours_end   SMALLINT,
+    consent_at        TIMESTAMPTZ,
+    consent_version   VARCHAR(20),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Checkin memory: Agent 4 persistent health timeline with pgvector

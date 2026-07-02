@@ -12,6 +12,7 @@ async function request<T>(
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...options.headers },
+    credentials: "include", // send/receive httpOnly auth cookies (same-origin via proxy)
     ...options,
   });
 
@@ -68,6 +69,176 @@ export async function signup(data: SignupData): Promise<{ session_id: string; la
 
 export async function getSession(sessionId: string): Promise<VERASession> {
   return request<VERASession>(`/session/${sessionId}`);
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string | null;
+  email_verified: boolean;
+  created_at: string | null;
+}
+
+export async function authSignup(
+  email: string,
+  password: string,
+  name?: string,
+  sessionId?: string,
+): Promise<{ user: AuthUser }> {
+  return request("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password, name, session_id: sessionId }),
+  });
+}
+
+export async function authLogin(
+  email: string,
+  password: string,
+  sessionId?: string,
+): Promise<{ user: AuthUser }> {
+  return request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password, session_id: sessionId }),
+  });
+}
+
+export async function authLogout(): Promise<{ ok: boolean }> {
+  return request("/auth/logout", { method: "POST" });
+}
+
+export async function authMe(): Promise<{ user: AuthUser }> {
+  return request("/auth/me");
+}
+
+export async function authRefresh(): Promise<{ user: AuthUser }> {
+  return request("/auth/refresh", { method: "POST" });
+}
+
+export async function linkSession(sessionId: string): Promise<{ ok: boolean }> {
+  return request("/auth/link-session", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+  return request("/auth/request-reset", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ ok: boolean }> {
+  return request("/auth/reset", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+export async function verifyEmail(token: string): Promise<{ ok: boolean }> {
+  return request("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+/** URL to kick off Google OAuth (full-page redirect, not fetch). */
+export function googleLoginUrl(sessionId?: string): string {
+  const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+  return `/api/auth/google/login${qs}`;
+}
+
+// ── Reminders ───────────────────────────────────────────────────────────────
+
+export interface Reminder {
+  id: string;
+  source: string;
+  title: string | null;
+  message: string;
+  due_at: string;
+  status: "pending" | "sent" | "read" | "dismissed" | "failed";
+  due: boolean;
+}
+
+export interface RemindersResponse {
+  reminders: Reminder[];
+  unread_due: number;
+}
+
+export async function getReminders(): Promise<RemindersResponse> {
+  return request<RemindersResponse>("/reminders");
+}
+
+export async function markReminderRead(id: string): Promise<{ ok: boolean }> {
+  return request(`/reminders/${id}/read`, { method: "POST" });
+}
+
+export async function dismissReminder(id: string): Promise<{ ok: boolean }> {
+  return request(`/reminders/${id}/dismiss`, { method: "POST" });
+}
+
+// ── Notification preferences ──────────────────────────────────────────────────
+
+export interface ChannelOptin {
+  in_app: boolean;
+  email: boolean;
+  sms: boolean;
+  whatsapp: boolean;
+}
+
+export interface NotificationPreferences {
+  channel_optin: ChannelOptin;
+  phone_e164: string | null;
+  phone_verified: boolean;
+  timezone: string;
+  quiet_hours_start: number | null;
+  quiet_hours_end: number | null;
+  consent_at: string | null;
+  consent_version: string | null;
+}
+
+export interface PreferencesResponse {
+  preferences: NotificationPreferences;
+  email: string;
+  email_verified: boolean;
+  consent_version: string;
+}
+
+export interface PreferencesPatch {
+  channel_optin?: Partial<ChannelOptin>;
+  timezone?: string;
+  quiet_hours_start?: number | null;
+  quiet_hours_end?: number | null;
+  give_consent?: boolean;
+}
+
+export async function getNotificationPreferences(): Promise<PreferencesResponse> {
+  return request<PreferencesResponse>("/notifications/preferences");
+}
+
+export async function updateNotificationPreferences(
+  patch: PreferencesPatch,
+): Promise<PreferencesResponse> {
+  return request<PreferencesResponse>("/notifications/preferences", {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function sendPhoneOtp(phone: string): Promise<{ ok: boolean }> {
+  return request("/notifications/phone/send-otp", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+export async function verifyPhoneOtp(code: string): Promise<PreferencesResponse> {
+  return request<PreferencesResponse>("/notifications/phone/verify", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
 }
 
 // ── Risk Profile ──────────────────────────────────────────────────────────────

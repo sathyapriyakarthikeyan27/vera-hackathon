@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Montserrat, Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth";
+import { RemindersProvider } from "@/lib/reminders";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat-face",
@@ -43,7 +45,9 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        {children}
+        <AuthProvider>
+          <RemindersProvider>{children}</RemindersProvider>
+        </AuthProvider>
       </body>
     </html>
   );

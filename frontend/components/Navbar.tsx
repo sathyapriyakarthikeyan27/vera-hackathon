@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { NotificationBell } from "@/components/NotificationBell";
+import { ReminderBanner } from "@/components/ReminderBanner";
 
 const NAV_ITEMS = [
   { label: "Assessment", href: "/assessment" },
@@ -25,9 +28,18 @@ function VeraLogo() {
 
 export function Navbar({ right }: { right?: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  async function handleLogout() {
+    await logout();
+    setMobileOpen(false);
+    router.push("/");
+  }
+
   return (
+    <>
     <header className="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-outline-variant/20">
       <div className="max-w-[1200px] mx-auto px-container-padding-mobile md:px-container-padding-desktop h-20 flex items-center justify-between">
         <Link href="/" aria-label="VERA home">
@@ -60,6 +72,30 @@ export function Navbar({ right }: { right?: React.ReactNode }) {
 
         <div className="flex items-center gap-3">
           {right && <div className="flex items-center">{right}</div>}
+
+          <NotificationBell />
+
+          {/* Auth affordance (desktop) */}
+          {!loading && (
+            <div className="hidden md:flex items-center gap-3">
+              {user ? (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-label-md text-on-surface-variant hover:text-primary transition-colors min-h-[44px] px-2"
+                >
+                  Sign out
+                </button>
+              ) : (
+                <Link
+                  href="/login"
+                  className="text-label-md text-primary font-bold hover:underline min-h-[44px] flex items-center px-2"
+                >
+                  Sign in
+                </Link>
+              )}
+            </div>
+          )}
 
           {/* Mobile hamburger */}
           <button
@@ -102,8 +138,28 @@ export function Navbar({ right }: { right?: React.ReactNode }) {
               </Link>
             );
           })}
+          {!loading &&
+            (user ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="text-left px-4 py-3 rounded-xl text-label-md text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors"
+              >
+                Sign out
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="px-4 py-3 rounded-xl text-label-md text-primary font-bold hover:bg-surface-container-low transition-colors"
+              >
+                Sign in
+              </Link>
+            ))}
         </nav>
       )}
     </header>
+    <ReminderBanner />
+    </>
   );
 }

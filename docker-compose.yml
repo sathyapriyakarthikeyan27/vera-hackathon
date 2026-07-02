@@ -16,6 +16,20 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    # Cache-aside layer for LLM results (Agent 2 schemes/clinics, embeddings).
+    # LRU eviction keeps memory bounded; data is disposable (regenerated on miss).
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    volumes:
+      - vera_redisdata:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -23,10 +37,29 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DATABASE_URL: postgresql://vera:${POSTGRES_PASSWORD:-vera_dev}@db:5432/vera
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET}
+      # Auth (Phase 0). JWT_SECRET falls back to SESSION_SECRET if unset.
+      JWT_SECRET: ${JWT_SECRET:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
+      EMAIL_API_KEY: ${EMAIL_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-VERA <no-reply@vera.health>}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -34,6 +67,47 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Celery worker: delivers reminders across channels (in-app now; email/SMS/WhatsApp later).
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "celery_app.celery", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      DATABASE_URL: postgresql://vera:${POSTGRES_PASSWORD:-vera_dev}@db:5432/vera
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
+      EMAIL_API_KEY: ${EMAIL_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-VERA <no-reply@vera.health>}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Celery Beat: periodically dispatches due reminders to the worker.
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "celery_app.celery", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    environment:
+      DATABASE_URL: postgresql://vera:${POSTGRES_PASSWORD:-vera_dev}@db:5432/vera
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      REMINDER_DISPATCH_INTERVAL: ${REMINDER_DISPATCH_INTERVAL:-60}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:
@@ -64,5 +138,6 @@ services:
 
 volumes:
   vera_pgdata:
+  vera_redisdata:
   caddy_data:
   caddy_config:
