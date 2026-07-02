@@ -8,8 +8,12 @@ Model constants:
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
+from typing import Callable, Optional
+
 import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
@@ -20,6 +24,10 @@ GEMINI_FLASH = "gemini-2.5-flash"
 GEMINI_PRO = "gemini-2.5-pro"
 
 _RETRY_DELAYS = [5, 15]  # seconds to wait on 429 before each retry
+
+# TTLs for the cross-session LLM cache (see services/cache.py).
+CACHE_TTL_GENERATE = 7 * 24 * 3600   # scheme/clinic results are stable for days
+CACHE_TTL_EMBED = 30 * 24 * 3600     # text -> embedding never changes for the same text
 
 
 def _is_rate_limit(exc: Exception) -> bool:
@@ -139,3 +147,86 @@ async def embed_text(text: str, model: str = "models/embedding-001") -> list[flo
         raise RuntimeError("GEMINI_API_KEY is not set")
     result = await asyncio.to_thread(genai.embed_content, model=model, content=text)
     return result["embedding"]
+
+
+# ── Cross-session cache wrappers (cache-aside via Redis) ────────────────────────
+# Opt-in only — used for user-agnostic results (Agent 2 schemes/clinics, embeddings).
+# Never cache personalized output (companion chat, risk reasoning, records).
+
+
+def _cache_key(namespace: str, model: str, semantic: str) -> str:
+    digest = hashlib.sha256(f"{model}|{semantic}".encode("utf-8")).hexdigest()
+    return f"vera:{namespace}:{digest}"
+
+
+def _passes(validate: Optional[Callable[[str], object]], value: str) -> bool:
+    """True if `value` is acceptable to cache/serve. No validator means accept all."""
+    if validate is None:
+        return True
+    try:
+        validate(value)
+        return True
+    except Exception:
+        return False
+
+
+async def generate_cached(
+    prompt: str,
+    semantic_key: str,
+    *,
+    model: str = GEMINI_FLASH,
+    ttl: int = CACHE_TTL_GENERATE,
+    validate: Optional[Callable[[str], object]] = None,
+) -> str:
+    """
+    generate() with a Redis cache-aside layer.
+
+    The cache is keyed by `semantic_key` (a coarse, user-agnostic descriptor like
+    "clinics:Mumbai:colorectal:Gastroenterologist") rather than the full prompt, so
+    per-user personalization in the prompt does not fragment the cache. Fail-open:
+    a cache outage simply means a live call.
+
+    `validate`, if given, is called on the model output before it is cached and on
+    any cached value before it is served. Only values that pass are stored, so a
+    single malformed generation cannot poison the key for the whole TTL. A cached
+    value that fails validation (e.g. written before a validator existed) is treated
+    as a miss and regenerated. Validators must raise on bad input.
+    """
+    from services import cache  # local import keeps gemini.py free of import-time coupling
+
+    key = _cache_key("llm", model, semantic_key)
+    hit = await cache.cache_get(key)
+    if hit is not None:
+        if _passes(validate, hit):
+            logger.info("llm_cache HIT %s", semantic_key)
+            return hit
+        logger.info("llm_cache STALE %s (cached value failed validation) — regenerating", semantic_key)
+    else:
+        logger.info("llm_cache MISS %s", semantic_key)
+
+    result = await generate(prompt, model)
+    if _passes(validate, result):
+        await cache.cache_set(key, result, ttl)
+    return result
+
+
+async def embed_text_cached(
+    text: str,
+    *,
+    model: str = "models/embedding-001",
+    ttl: int = CACHE_TTL_EMBED,
+) -> list[float]:
+    """embed_text() with a Redis cache-aside layer keyed by the input text."""
+    from services import cache
+
+    key = _cache_key("emb", model, text)
+    hit = await cache.cache_get(key)
+    if hit is not None:
+        try:
+            return json.loads(hit)
+        except (ValueError, TypeError):
+            pass  # corrupted entry — fall through and regenerate
+
+    embedding = await embed_text(text, model)
+    await cache.cache_set(key, json.dumps(embedding), ttl)
+    return embedding

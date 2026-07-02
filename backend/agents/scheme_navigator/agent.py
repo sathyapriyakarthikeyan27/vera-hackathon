@@ -111,7 +111,7 @@ async def _find_schemes(
     """Try pgvector semantic search first; fall back to Gemini generation."""
     try:
         query = f"{location} cancer screening scheme {' '.join(cancer_types)} {risk_level} risk"
-        embedding = await gemini.embed_text(query)
+        embedding = await gemini.embed_text_cached(query)
         rows = await search_schemes(embedding, location, limit=4)
         if rows:
             return [_scheme_row_to_output(r) for r in rows]
@@ -177,8 +177,14 @@ Return ONLY the JSON array."""
         },
     ]
 
+    # Cross-session cache: schemes depend only on these user-agnostic fields, not identity.
+    cache_key = (
+        f"schemes:{location}:{risk_level}:{'+'.join(sorted(cancer_types))}"
+        f":{gender}:{age_group}"
+    )
     try:
-        raw = await gemini.generate(prompt)
+        # validate=_parse_json_array so a malformed generation is never cached.
+        raw = await gemini.generate_cached(prompt, cache_key, validate=_parse_json_array)
         return _parse_json_array(raw)
     except Exception:
         return fallback
@@ -249,8 +255,14 @@ Return a JSON array of exactly 3 clinics — no markdown:
         },
     ]
 
+    # Cross-session cache: hospital lists depend on location, cancer type, specialist,
+    # and gender preference — not on the individual. Age is excluded for higher reuse.
+    cache_key = (
+        f"clinics:{location}:{'+'.join(sorted(cancer_types))}:{specialist}:{gender}"
+    )
     try:
-        raw = await gemini.generate(prompt)
+        # validate=_parse_json_array so a malformed generation is never cached.
+        raw = await gemini.generate_cached(prompt, cache_key, validate=_parse_json_array)
         return _parse_json_array(raw)
     except Exception:
         return fallback
