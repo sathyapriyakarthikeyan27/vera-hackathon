@@ -188,15 +188,15 @@ Agent 4 — Companion
 
 | Cut | Reason |
 |-----|--------|
-| Authentication | Demo risk; localStorage session sufficient for judges |
-| i18n / multilanguage | next-intl caused Docker build failures; English hardcoded |
-| MedGemma / Featherless | Vertex AI access unavailable; Gemini 2.5 Pro is the replacement |
+| Full authentication | Not yet implemented; localStorage session is the current state (roadmap item) |
+| i18n / multilanguage | Not yet active; English hardcoded (roadmap item) |
+| MedGemma / Featherless | Gemini 2.5 Pro currently handles records and image analysis |
 | Gemini Vision | Gemini 2.5 Pro handles all document types including images |
-| Real government APIs | Auth/approval impossible in 5 days; RAG mock is sufficient |
-| Celery + Redis | FastAPI BackgroundTasks covers all scheduling needs |
+| Real government APIs | Scheme/hospital data is synthetic via RAG; real APIs need per-country partnerships |
+| Celery / external task queue | FastAPI BackgroundTasks covers scheduling. Redis IS used, but only as a cache layer |
 | LangChain | Raw async Python simpler and more debuggable |
-| Live appointment booking | Hospital APIs in India are fragmented and unreliable |
-| Native mobile app | PWA sufficient for demo; no app store review delay |
+| Live appointment booking | Hospital booking APIs are fragmented and unreliable |
+| Native mobile app | PWA is installable on mobile, single codebase, no app store review |
 
 ---
 
@@ -206,5 +206,5 @@ Agent 4 — Companion
 2. **VERA speaks in first person.** "I", "I've found", "I'm here." Not a system. A companion.
 3. **Plain language everywhere.** Never use a medical term without a plain-language explanation alongside it.
 4. **WCAG 2.1 AA.** 44px touch targets, 16px minimum body font, visible focus indicators, meaningful alt text.
-5. **Deterministic router.** Never replace with an LLM-based planner. Deterministic equals reliable, low-latency, demo-safe.
+5. **Deterministic router.** Never replace with an LLM-based planner. Deterministic equals reliable, low-latency, predictable in production.
 6. **Agent 1 owns score.** No other agent writes to `risk_assessment.score`. This prevents race conditions.

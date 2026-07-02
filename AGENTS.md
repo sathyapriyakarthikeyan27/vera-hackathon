@@ -112,7 +112,7 @@ Return: matched schemes + specialist type + nearest clinics
 | Egypt | NHIA (National Health Insurance Authority) |
 | UK | NHS free cancer screening programmes |
 
-No real government APIs are called. All data is synthetic JSON embedded with pgvector for similarity search. This is a deliberate hackathon decision.
+No real government APIs are called. All data is synthetic JSON embedded with pgvector for similarity search. This is a deliberate architectural decision.
 
 ### Specialist Routing
 
@@ -163,7 +163,7 @@ After extraction, Agent 3:
 Files are read from bytes in memory. Never written to disk. Never stored after response.
 
 ```python
-# Privacy pattern shown to judges
+# Privacy pattern: process in memory, never write to disk
 content: bytes = await file.read()
 # ... process in memory ...
 # file bytes go out of scope — no disk write, no storage

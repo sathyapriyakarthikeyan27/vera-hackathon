@@ -26,6 +26,7 @@ VERA catches cancer risk before it becomes a crisis. It generates personalised a
 | Frontend | Next.js 16 (App Router, PWA), Tailwind CSS v4 |
 | Backend | FastAPI (Python, async) |
 | Database | PostgreSQL 16 + pgvector |
+| Cache | Redis (cache-aside layer for user-agnostic LLM results) |
 | AI | Gemini 2.5 Flash (Agents 1, 2, 4) + Gemini 2.5 Pro (Agent 3) |
 | Embeddings | `models/embedding-001` (768-dimensional, pgvector RAG) |
 | Reverse proxy | Caddy (port 80) |

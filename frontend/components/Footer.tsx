@@ -18,7 +18,7 @@ export function Footer() {
           VERA is a health awareness tool, not a medical device. Always consult a qualified doctor.
         </p>
         <p className="text-label-sm text-on-surface-variant/50">
-          &copy; 2026 VERA · Built for AI Agent Olympics, Milan AI Week
+          &copy; 2026 VERA · Your vital early risk advisor
         </p>
       </div>
     </footer>

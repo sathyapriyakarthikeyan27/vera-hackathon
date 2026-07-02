@@ -1,6 +1,6 @@
 # VERA — Claude Code Context File
 **Vital Early Risk Advisor**
-Last updated: May 18, 2026
+Last updated: June 26, 2026
 
 ---
 
@@ -28,17 +28,15 @@ This applies to: landing page, signup, chat, risk output, conflict card, compani
 
 ---
 
-**Hackathon:** AI Agent Olympics — Milan AI Week 2026
-**Platform:** lablab.ai
-**Track:** Collaborative Agent Swarms
-**Primary Partner:** Google Gemini (competing for Gemini prize)
-**Secondary Partner:** Vultr (deployment)
-**Submission deadline:** May 19, 5PM
-**Live demo:** May 20, Milan
+## Status: Production
 
-> REVISED TIMELINE — May 18
-> Feature development is complete. Today (May 18) = full demo run + Vultr deployment only.
-> May 19 = UI polish (conflict card), pitch deck, submit by 5PM. No new features.
+VERA is a live production application. It began as a Milan AI Week 2026 project, but that phase is
+over. Build for real users following industry best practices. Do not frame decisions around
+"judges", "demo reliability", or a submission deadline. Features should be complete, correct, and
+maintainable.
+
+- **AI:** Google Gemini (2.5 Flash + Pro)
+- **Deployment:** Vultr (Docker Compose)
 
 ---
 
@@ -55,30 +53,40 @@ This applies to: landing page, signup, chat, risk output, conflict card, compani
 
 ## Authentication
 
-### Decision: Dropped for Demo — Session Persistence via localStorage
+### Current state: Production auth — email + password and Google OAuth
 
-Authentication (magic link / OTP / JWT) is **dropped for the hackathon demo** to reduce complexity and demo risk. Session data persists for 2-3 hours via localStorage + backend session store.
+Full authentication is **implemented** (Phase 0 of the reminders program). Magic link / OTP was
+evaluated and dropped in favour of production-grade accounts.
 
-**Three localStorage keys:**
-- `vera_session_id` — backend session UUID, set after signup
-- `vera_profile_complete` — set to `"1"` after signup form submission
-- `vera_assessment_complete` — set to `"1"` after risk assessment completes
+**Mechanics:**
+- **Email + password:** Argon2id hashing, email verification, password reset. Min 8 chars.
+- **Google OAuth:** Authorization Code flow (`/api/auth/google/login` → `/api/auth/google/callback`).
+  Disabled gracefully (503) if `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are unset.
+- **Tokens:** stateless access JWT (~15 min) + opaque, DB-backed, rotating refresh token
+  (~30 days), both in **httpOnly, SameSite=Lax cookies** (`vera_access`, `vera_refresh`).
+  `COOKIE_SECURE=true` in production. Refresh, email-verify, and reset tokens are stored **hashed**
+  (SHA-256) in `auth_tokens`, single-use, expiring.
 
-**Routing logic (StartAssessmentButton component):**
-- No `vera_session_id` or no `vera_profile_complete` → `/signup`
-- Has profile but no `vera_assessment_complete` → `/assessment`
-- Has both profile + assessment → `/risk`
+**Backend:** `services/security.py` (hashing + JWT), `services/auth_store.py` (users, oauth accounts,
+tokens), `routers/auth.py` (endpoints + `get_current_user` dependency), `services/email.py` (verify /
+reset sender — dev-logs the link if no provider). Tables: `users` (+ `password_hash`, `email_verified`),
+`oauth_accounts`, `auth_tokens`, and `sessions.user_id` now populated.
 
-**Backend:** Sessions stored in PostgreSQL via `session_store`. Backend session holds all profile data, risk state, and agent outputs. No user accounts, no auth tokens.
+**Frontend:** `lib/auth.tsx` (`AuthProvider`, `useAuth`, `useRequireAuth`). Pages: `/login`,
+`/register`, `/forgot-password`, `/reset-password`, `/verify-email`. Flow pages (`/signup` profile,
+`/assessment`, `/risk`, `/care`, `/records`, `/chat`, `/companion`) are guarded by `useRequireAuth`.
+The anonymous `vera_session_id` is bound to the account via `/api/auth/link-session` after profile
+submission. `vera_profile_complete` / `vera_assessment_complete` remain as local progress flags only.
 
-**Note for post-hackathon:** Magic link / OTP auth was planned but dropped. The architecture already supports it — add `users` + `auth_tokens` tables and link `session.user_id`.
+**Roadmap:** phone/email verification for the notification channels, per-provider consent, session
+revocation UI.
 
 ---
 
 ## Onboarding Flow
 
 ### Signup — Minimal Friction (No auth required)
-Collect only these fields. No language selector (English only for demo).
+Collect only these fields. No language selector (English only for now).
 
 ```
 Name | Date of Birth | Gender | Location | Height (cm) | Weight (kg)
@@ -126,9 +134,9 @@ After signup, Agent 1 generates questions dynamically via Gemini. UI is card-bas
 
 ## Internationalisation (i18n)
 
-### Decision: Dropped for Demo — English Only
+### Current state: English Only (multi-language on the roadmap)
 
-i18n (next-intl) is **dropped for the hackathon demo** to reduce complexity. All UI strings are hardcoded in English directly in components.
+i18n (next-intl) is **not yet active**. All UI strings are currently hardcoded in English directly in components.
 
 **What this means in practice:**
 - Do NOT use `t()` from next-intl in new components
@@ -136,13 +144,13 @@ i18n (next-intl) is **dropped for the hackathon demo** to reduce complexity. All
 - Hardcode all strings in English in TSX
 - Language is set to `"en"` in signup and session — backend still accepts the field but it's always `"en"`
 
-**Note for post-hackathon:** next-intl is already installed and `messages/en.json` partially exists. Priority languages were: English, Hindi, Tamil, Arabic. Re-enabling requires wrapping components with `useTranslations` and moving strings to `messages/*.json`.
+**Roadmap:** next-intl is already installed and `messages/en.json` partially exists. Priority languages: English, Hindi, Tamil, Arabic. Re-enabling requires wrapping components with `useTranslations` and moving strings to `messages/*.json`.
 
 ---
 
 ## Accessibility — WCAG 2.1 AA
 
-Every screen must meet WCAG 2.1 Level AA. This is rare in hackathons and will impress judges significantly.
+Every screen must meet WCAG 2.1 Level AA. Accessibility is a core product requirement, not an afterthought.
 
 **Non-negotiables:**
 - All interactive elements have `aria-label` or associated `<label>`
@@ -184,7 +192,7 @@ Every screen must meet WCAG 2.1 Level AA. This is rare in hackathons and will im
 | High + symptoms present | Urgent referral flagged as time-sensitive. Show emergency contact information. |
 
 **Risk Explainability (important):**
-Every risk output must include a plain-language explanation of WHY VERA assigned that score. Example: "I rated your risk as medium because of your family history of colorectal cancer and the fact that you have not had a colonoscopy in over 5 years." Judges and users both need this.
+Every risk output must include a plain-language explanation of WHY VERA assigned that score. Example: "I rated your risk as medium because of your family history of colorectal cancer and the fact that you have not had a colonoscopy in over 5 years." Users need this, and it keeps VERA's reasoning transparent and auditable.
 
 **Specialist routing logic:**
 
@@ -221,7 +229,7 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 
 **Filters applied:** User location, cost preference, risk urgency
 
-**Note:** All hospital and scheme data is synthetic JSON stored in pgvector. Do not attempt to call real government APIs. This is a deliberate hackathon decision.
+**Note:** All hospital and scheme data is synthetic JSON stored in pgvector. Do not attempt to call real government APIs. This is a deliberate architectural decision.
 
 ---
 
@@ -231,7 +239,7 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 
 **Supported file types:** PDF, JPG, PNG (lab reports, MRI scans, prescriptions, pathology reports)
 
-**Model:** Gemini pro used for demo. MedGemma preferred for production as it handles all document types including images. MedGemma is capable of reading and reasoning over clinical text and medical images. Gemini Vision is NOT used.
+**Model:** Gemini 2.5 Pro for records and medical image analysis. MedGemma was evaluated as an alternative (purpose-built for clinical content) but is not currently used. Gemini Vision is NOT used.
 
 **Behaviour:**
 - Explains findings in the user's preferred language — no medical jargon
@@ -239,7 +247,7 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 - Answers follow-up questions about the report in the same session
 - Produces dual output: user explanation + clinical signals JSON (see Agent 3 section below)
 
-**Privacy:** Files processed in memory only. Deleted immediately after response via `try/finally`. Never stored. Never logged. Show this code to judges explicitly.
+**Privacy:** Files processed in memory only. Deleted immediately after response via `try/finally`. Never stored. Never logged. This deletion guarantee is a hard privacy requirement.
 
 **What Agent 3 must NOT do:**
 - Diagnose
@@ -279,7 +287,9 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 - Agent 4 builds a living health timeline per user
 - Used to personalise future messages and surface patterns over time
 
-**Demo button:** "Simulate 3 Days Later" — fast-forwards time to show a proactive check-in firing. Judges must see this. It demonstrates VERA is not a passive tool.
+**Proactive check-ins:** Check-ins fire on a real schedule (FastAPI BackgroundTasks). There is no
+"Simulate 3 Days Later" button in the production UI. A hidden internal endpoint (`/companion/checkin`)
+may remain for testing only — it must not be exposed in the user-facing UI.
 
 ---
 
@@ -289,7 +299,7 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 - Next.js 16 (PWA — mobile-first, no app store needed)
 - Tailwind CSS v4 (CSS-first config via `@theme` in `globals.css` — no `tailwind.config.js`)
 - Care & Clarity design system: custom tokens, typography utilities, `soft-elevation`
-- English only for demo (next-intl dropped)
+- English only for now (next-intl not yet active)
 
 ### Backend
 - FastAPI (Python) — async
@@ -312,16 +322,30 @@ Note: Gemini Vision is NOT used. MedGemma is NOT used. Preferred for prod as it 
 ### Infrastructure
 - Vultr — deployment
 - Vultr Object Storage — temporary health record storage, deleted immediately after response
+- Redis — cache-aside layer for user-agnostic LLM results (Agent 2 schemes/clinics, embeddings). See Caching section.
 - Docker — containerised
 
 ### Explicitly Dropped (do not reintroduce)
 - LangChain
-- Celery + Redis (use FastAPI BackgroundTasks)
-- Real government APIs (mocked via RAG in pgvector)
-- Gemini TTS (stretch goal only)
-- MedGemma (Gemini 2.5 Pro handles demo)
-- Magic link / OTP authentication (dropped for demo, use localStorage session persistence)
-- next-intl / multilanguage (dropped for demo, English hardcoded)
+- Real government APIs (scheme and hospital data is synthetic, served via RAG in pgvector)
+- Gemini TTS (not in scope yet)
+- MedGemma (Gemini 2.5 Pro handles records and image analysis)
+
+### Reversed decisions
+- **Celery reintroduced** for the reminders/notifications program: Celery Beat schedules time-based
+  reminders and workers deliver them (in-app / email / SMS / WhatsApp) with retries. Redis is now
+  **dual-purpose** — cache-aside for LLM results **and** the Celery broker/result backend (separate
+  logical DBs). This supersedes the earlier "drop Celery / Redis is cache-only" stance. Scheduled
+  delivery is Phase 2 of the reminders plan (see `docs/reminders-plan.md`); until then no scheduler runs.
+
+### Reminder channels (all implemented — see `docs/reminders-plan.md`)
+- In-app (bell/banner), email, SMS, and WhatsApp are all built behind `services/channels.py`.
+  Each is dev-safe: without provider credentials the message is logged (recipient masked) instead of
+  sent. Set `EMAIL_PROVIDER`/`EMAIL_API_KEY` (Resend/SendGrid) and `TWILIO_*` to go live. Delivery is
+  gated on opt-in + consent + verified contact (email verified / phone OTP).
+
+### Not yet implemented (on the roadmap, not dropped)
+- next-intl / multi-language (currently English only)
 
 ---
 
@@ -340,7 +364,37 @@ else:
     route_to(Agent2)
 ```
 
-**Important:** The router is deterministic by design. Do not replace it with an LLM-based planner. Deterministic = reliable, low-latency, demo-safe.
+**Important:** The router is deterministic by design. Do not replace it with an LLM-based planner. Deterministic = reliable, low-latency, predictable in production.
+
+---
+
+## Caching (LLM result cache)
+
+VERA caches at two levels:
+
+1. **Per-session output cache (PostgreSQL).** Each agent's output (`schemes_output`,
+   `companion_output`, etc.) is stored on the session row and returned on repeat requests within
+   that session. Cleared when a reconciliation changes the picture (e.g. `companion_output` after a
+   conflict).
+
+2. **Cross-session LLM cache (Redis, cache-aside).** User-agnostic Gemini results are shared across
+   sessions and users so the same work is not regenerated for every person.
+
+**What is cached cross-session (Agent 2 / Care Navigator only):**
+- Government scheme generation — key: `schemes:{location}:{risk}:{cancer_types}:{gender}:{age_group}`
+- Nearby hospital / clinic lookup — key: `clinics:{location}:{cancer_types}:{specialist}:{gender}`
+- Scheme-search embeddings — key: the query text
+
+**Rules:**
+- Opt-in only, via `gemini.generate_cached()` / `gemini.embed_text_cached()`. Plain `generate()` /
+  `embed_text()` are uncached. **Never cache personalized output** (companion chat, risk reasoning,
+  records explanations) or anything containing PII.
+- **Fail-open:** any Redis error or outage is treated as a cache miss; the request falls through to a
+  live Gemini call. The cache can never break a request. The app also runs cache-less if `REDIS_URL`
+  is unset.
+- TTLs: scheme/clinic results 7 days; embeddings 30 days. Redis handles eviction (`allkeys-lru`).
+- Implementation: `services/cache.py` (Redis client), cached wrappers in `services/gemini.py`,
+  wired in `agents/scheme_navigator/agent.py`. Tests in `tests/test_llm_cache.py`.
 
 ---
 
@@ -377,7 +431,7 @@ risk_assessment = {
 
 **The scenario:** Agent 1 scores a user as MEDIUM risk from their profile. The user later uploads a lab report. Agent 3 reads it and finds high-severity clinical signals. Agent 1 reconciles, conflict is detected, score changes to HIGH. The user sees the conflict surfaced explicitly.
 
-**Why this matters to judges:** The agents are not just passing data — they are checking each other's conclusions. A finding from one agent changes the output of another. That is genuine collaboration.
+**Why this matters:** The agents are not just passing data — they are checking each other's conclusions. A finding from one agent changes the output of another. That is genuine collaboration.
 
 ---
 
@@ -454,7 +508,7 @@ After reconciliation:
 - Clear `risk_assessment.pending_signals`
 - If `conflict = True`, surface conflict message to user before routing to Agent 2
 
-**Verdict C is impressive to judges.** VERA admitting uncertainty is more credible than always being confident. Do not skip it.
+**Verdict C matters.** VERA admitting uncertainty is more credible and safer for users than always being confident. Do not skip it.
 
 ---
 
@@ -464,11 +518,11 @@ When `conflict = True`, show this before the care navigation output:
 
 > "I've updated your risk assessment. Your profile initially pointed to [ORIGINAL SCORE] risk. But your [document type] has changed that picture. I now consider your risk to be [NEW SCORE]. Here is why: [REASON]. Here is what I recommend next."
 
-This moment is your headline demo beat. Make it visually distinct in the UI. A different card, a different colour, not just a text update. No em dashes in the copy.
+This moment is a key part of the experience. Make it visually distinct in the UI. A different card, a different colour, not just a text update. No em dashes in the copy.
 
 ---
 
-## Full Collaboration Flow (Demo Sequence)
+## Full Collaboration Flow (End-to-End Sequence)
 
 ```
 1. User lands on homepage, clicks "Start Assessment"
@@ -517,15 +571,16 @@ This moment is your headline demo beat. Make it visually distinct in the UI. A d
 ## Privacy Architecture
 
 - Health records never stored. Processed in memory, deleted immediately after response.
-- Use explicit `try/finally` block for file deletion. Show this code to judges.
+- Use explicit `try/finally` block for file deletion.
 - User profile encrypted at rest
 - No PII in logs
 - Session-based processing for all medical documents
-- Session ID stored in localStorage (no auth tokens for demo)
+- Session ID stored in localStorage (no auth tokens yet — see Authentication)
 - In-app disclaimer: "VERA is a health awareness tool, not a medical device"
+- LLM cache (Redis) only ever stores user-agnostic results (schemes, hospitals, embeddings). Never personalized content, never PII.
 
 ```python
-# Show judges this pattern
+# File is always deleted, even on exception — hard privacy requirement
 async def process_health_record(file):
     temp_path = save_temporarily(file)
     try:
@@ -539,7 +594,7 @@ async def process_health_record(file):
 
 ## Multilingual Support
 
-**Dropped for demo.** All content is English only. See i18n section above.
+**Not yet active.** All content is currently English only. See i18n section above.
 
 Backend session still stores `language: "en"`. Agent prompts include it in case Gemini defaults help, but no UI language switching exists.
 
@@ -560,18 +615,19 @@ Backend session still stores `language: "en"`. Agent prompts include it in case 
 
 | Decision | Reason |
 |---|---|
-| Deterministic router | LLM routing = unpredictable, high latency, demo crash risk |
+| Deterministic router | LLM routing = unpredictable, higher latency, harder to test |
 | Agent 1 owns score field | Prevents race conditions when multiple agents produce signals |
 | pending_signals not direct score overwrite | Collaboration happens through Agent 1, not around it |
-| Mock govt APIs via RAG | Real APIs need auth, impossible in 5 days |
-| Next.js PWA not React Native | No app store, faster build |
-| Drop LangChain | Raw async Python simpler to debug in hackathon conditions |
-| No auth for demo (localStorage session) | Auth adds demo risk. Session persists for 2-3 hours. Sufficient for judges. |
-| English only for demo (no next-intl) | Multilanguage adds complexity. Demo judges are English speakers. |
-| MedGemma for images, not Gemini Vision | MedGemma is purpose-built for clinical content |
+| Synthetic govt/hospital data via RAG | Real government APIs require per-country auth and partnerships; synthetic RAG data is the current approach |
+| Next.js PWA not React Native | No app store, single codebase, installable on mobile |
+| Drop LangChain | Raw async Python is simpler to debug and maintain |
+| Redis cache-aside for LLM results | User-agnostic schemes/hospitals/embeddings reused across sessions; shared across workers, TTL-native, keeps load off Postgres |
+| Production auth (email+password + Google OAuth) | Argon2 + JWT/refresh httpOnly cookies. Replaces the localStorage-only session. Magic link / OTP evaluated and dropped. Durable identity is required for scheduled reminders. |
+| English only (i18n on roadmap) | Multi-language is a tracked roadmap item; UI strings are currently hardcoded English |
+| MedGemma evaluated, Gemini 2.5 Pro in use | Gemini 2.5 Pro currently handles records and image analysis |
 | AI-generated assessment questions | Static questions feel like a form. Gemini generates contextual questions per user. |
 | BMI computed at signup, passed to Agent 1 | Height + weight collected at signup. BMI informs question relevance and risk score. |
-| `/assessment` not `/chat` for risk profiling | Card-based UI is more demo-friendly than chat. Shows structured progress. |
+| `/assessment` not `/chat` for risk profiling | Card-based UI shows structured progress and is clearer than a chat transcript. |
 | DOB input → age_group enum | Natural input for users. Frontend computes backend enum. |
-| WCAG 2.1 AA target | Rare in hackathons, high signal to judges |
+| WCAG 2.1 AA target | Accessibility is a core requirement for a health product serving all ages and abilities |
 | Tailwind v4 CSS-first (no tailwind.config.js) | All tokens in `globals.css` via `@theme`. Cleaner, no config file. |

@@ -7,7 +7,8 @@ Dual output every time:
   2. Clinical signals JSON — appended to risk_assessment.pending_signals for Agent 1
 
 Privacy: files read directly from bytes in memory. Never written to disk.
-Always show judges the try/finally pattern when presenting.
+The try/finally pattern guarantees the uploaded file is released even on error —
+this is a hard privacy requirement, not optional.
 """
 
 import asyncio

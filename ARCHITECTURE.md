@@ -69,7 +69,7 @@ External Services:
 - **Framework**: Next.js (App Router)
 - **Styling**: Tailwind CSS v4 (CSS-first, no tailwind.config.js — tokens in `globals.css` via `@theme`)
 - **Design system**: Care & Clarity — custom tokens, typography utilities, `soft-elevation`
-- **i18n**: English only (next-intl dropped for demo)
+- **i18n**: English only (next-intl not yet active; roadmap item)
 - **Session**: localStorage — `vera_session_id`, `vera_profile_complete`, `vera_assessment_complete`
 - **Key Pages**:
   - `/` — Landing page with shared Navbar + Footer
@@ -125,7 +125,7 @@ The router is deterministic by design. Never replace with an LLM-based planner.
 ### PostgreSQL Tables
 
 ```sql
--- Sessions (active conversation state — no user accounts for demo)
+-- Sessions (active conversation state — no user accounts yet; full auth on roadmap)
 session_store (
   session_id    TEXT PRIMARY KEY,
   data          JSONB,              -- full session state

@@ -1,0 +1,5 @@
+{"doc": "colonoscopy_polyp.png", "mime": "image/png", "severity": "high", "specialist": "Gastroenterologist", "urgency_flag": true, "anomalies": ["12mm tubulovillous adenoma, ascending colon"]}
+{"doc": "normal_cbc.png", "mime": "image/png", "severity": "low", "specialist": null, "urgency_flag": false, "anomalies": []}
+{"doc": "mammogram_birads4.png", "mime": "image/png", "severity": "high", "specialist": "Oncologist", "urgency_flag": true, "anomalies": ["BI-RADS 4 suspicious mass, left breast upper outer quadrant"]}
+{"doc": "chest_ct_nodule.pdf", "mime": "application/pdf", "severity": "medium", "specialist": "Pulmonologist", "urgency_flag": false, "anomalies": ["6mm noncalcified nodule, right upper lobe, follow-up recommended"]}
+{"doc": "skin_biopsy_benign.png", "mime": "image/png", "severity": "low", "specialist": null, "urgency_flag": false, "anomalies": []}
