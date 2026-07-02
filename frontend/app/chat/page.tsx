@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
+import { useRequireAuth } from "@/lib/auth";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ function buildWelcomeMessage(ctx: SessionContext): Message {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
+  useRequireAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);

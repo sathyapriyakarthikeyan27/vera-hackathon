@@ -8,6 +8,7 @@ import { uploadRecord, reconcileRisk } from "@/lib/api";
 import type { RecordsOutput, ReconcileResult } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { useRequireAuth } from "@/lib/auth";
 
 const MOCK = false; // set to true to use mock data
 
@@ -59,6 +60,7 @@ const SEVERITY_STYLES: Record<string, { badge: string; dot: string; border: stri
 };
 
 export default function RecordsPage() {
+  useRequireAuth();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);

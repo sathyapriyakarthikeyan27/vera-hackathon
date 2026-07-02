@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth";
 
 export function StartAssessmentButton({
   className,
@@ -10,18 +11,22 @@ export function StartAssessmentButton({
   className?: string;
   children: React.ReactNode;
 }) {
-  const [href, setHref] = useState("/signup");
+  const { user, loading } = useAuth();
+  const [href, setHref] = useState("/register");
 
   useEffect(() => {
-    const sid = localStorage.getItem("vera_session_id");
+    if (loading) return;
+    if (!user) {
+      setHref("/register");
+      return;
+    }
+    // Signed in — route by how far they got (profile / assessment tracked locally).
     const profileComplete = localStorage.getItem("vera_profile_complete");
     const assessmentComplete = localStorage.getItem("vera_assessment_complete");
-    if (sid && profileComplete && assessmentComplete) {
-      setHref("/risk");
-    } else if (sid && profileComplete) {
-      setHref("/assessment");
-    }
-  }, []);
+    if (profileComplete && assessmentComplete) setHref("/risk");
+    else if (profileComplete) setHref("/assessment");
+    else setHref("/signup");
+  }, [user, loading]);
 
   return (
     <Link href={href} className={className}>

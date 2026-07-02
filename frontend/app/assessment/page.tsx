@@ -7,6 +7,7 @@ import { startRisk, answerRisk } from "@/lib/api";
 import type { RiskQuestion } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { useRequireAuth } from "@/lib/auth";
 
 const MOCK = false; // set to true to use mock data
 
@@ -23,6 +24,7 @@ const MOCK_QUESTIONS: import("@/lib/api").RiskQuestion[] = [
 
 
 export default function AssessmentPage() {
+  useRequireAuth();
   const router = useRouter();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);

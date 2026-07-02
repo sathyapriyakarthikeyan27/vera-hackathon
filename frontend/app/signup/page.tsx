@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { signup } from "@/lib/api";
+import { signup, linkSession } from "@/lib/api";
+import { useRequireAuth } from "@/lib/auth";
 
 // ── City list ────────────────────────────────────────────────────────────────
 
@@ -248,6 +249,7 @@ function CityCombobox({
 
 export default function SignupPage() {
   const router = useRouter();
+  useRequireAuth(); // health profile is only collected for signed-in accounts
 
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
@@ -278,6 +280,7 @@ export default function SignupPage() {
       });
       localStorage.setItem("vera_session_id", result.session_id);
       localStorage.setItem("vera_profile_complete", "1");
+      await linkSession(result.session_id).catch(() => {}); // bind session to the account
       router.push("/assessment");
     } catch (e) {
       console.error("Signup error:", e);

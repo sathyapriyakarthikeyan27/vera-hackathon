@@ -5,6 +5,7 @@ import Link from "next/link";
 import { matchSchemes } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { useRequireAuth } from "@/lib/auth";
 import type { SchemesOutput, Clinic, SchemeMatch } from "@/lib/api";
 
 const MOCK = false; // set to true to use mock data
@@ -58,6 +59,7 @@ const MOCK_CLINICS: Clinic[] = [
 
 
 export default function CarePage() {
+  useRequireAuth();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [schemes, setSchemes] = useState<SchemeMatch[]>([]);
   const [loading, setLoading] = useState(true);
