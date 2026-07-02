@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { generateFollowup } from "@/lib/api";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
+import { useRequireAuth } from "@/lib/auth";
 import type { CompanionOutput, FollowUpItem } from "@/lib/api";
 
 const LANG_LABELS: Record<string, string> = {
@@ -12,6 +15,7 @@ const LANG_LABELS: Record<string, string> = {
 };
 
 export default function CompanionPage() {
+  useRequireAuth();
   const [output, setOutput] = useState<CompanionOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,128 +63,131 @@ export default function CompanionPage() {
   const activeMessage = output.family_message_drafts?.[activeLang as "en" | "hi" | "ta"] ?? "";
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <header className="bg-teal-900 text-white px-6 py-4 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center font-bold text-xs" aria-hidden="true">
-            V
-          </div>
-          <div>
-            <p className="font-semibold text-sm leading-tight">VERA</p>
-            <p className="text-teal-300 text-xs">Companion Agent</p>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background">
+      <Navbar />
 
-      <main id="main-content" className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+      <main
+        id="main-content"
+        className="pt-32 pb-stack-lg max-w-[800px] mx-auto px-container-padding-mobile md:px-0 flex flex-col gap-stack-md"
+      >
         <h1 className="sr-only">Your Companion Plan</h1>
+
         {/* Greeting */}
-        <div className="bg-teal-800 text-white rounded-2xl p-6 shadow-sm">
-          <p className="text-xs text-teal-300 uppercase tracking-widest mb-2">
-            Agent 04 · Companion
-          </p>
-          <p className="text-base leading-relaxed">{output.greeting}</p>
-        </div>
+        <section className="relative overflow-hidden bg-primary-container text-on-primary-container p-stack-md rounded-xl soft-elevation">
+          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none" aria-hidden="true">
+            <span className="material-symbols-outlined text-9xl">guardian</span>
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-stack-sm">
+              <span className="bg-on-primary-container/20 px-3 py-1 rounded-full text-label-sm uppercase tracking-wider">
+                Agent 04 · Companion
+              </span>
+            </div>
+            <p className="text-body-lg leading-relaxed opacity-90">{output.greeting}</p>
+          </div>
+        </section>
 
         {/* Escalation banner — shown when a document triggered a risk change */}
         {output.conflict_context?.triggered && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-5" role="alert">
-            <p className="text-xs font-semibold text-red-700 uppercase tracking-widest mb-1">
-              {output.conflict_context.uncertain ? "Findings to review" : "Risk updated"}
-            </p>
-            <p className="text-sm text-red-900 leading-relaxed">
-              Your{" "}
-              <span className="font-semibold">
-                {output.conflict_context.document_filename || output.conflict_context.document_type || "uploaded report"}
-              </span>{" "}
-              {output.conflict_context.uncertain ? (
-                <>
-                  surfaced findings that need a specialist to review. Your risk level
-                  has not changed, but your plan below helps you arrange that review.
-                </>
-              ) : (
-                <>
-                  changed your risk from{" "}
-                  <span className="font-semibold">{output.conflict_context.original_score}</span> to{" "}
-                  <span className="font-semibold">{output.conflict_context.new_score}</span>. Your plan
-                  below reflects this updated picture.
-                </>
-              )}
-            </p>
-          </div>
+          <section
+            className="bg-error-container text-on-error-container p-stack-sm rounded-xl flex items-start gap-4 border border-error/10"
+            role="alert"
+          >
+            <span className="material-symbols-outlined text-error flex-shrink-0" aria-hidden="true">
+              warning
+            </span>
+            <div className="flex-1">
+              <span className="text-label-md font-bold uppercase text-error">
+                {output.conflict_context.uncertain ? "Findings to review" : "Risk updated"}
+              </span>
+              <p className="text-body-md leading-relaxed mt-0.5">
+                Your{" "}
+                <span className="font-bold">
+                  {output.conflict_context.document_filename ||
+                    output.conflict_context.document_type ||
+                    "uploaded report"}
+                </span>{" "}
+                {output.conflict_context.uncertain ? (
+                  <>
+                    surfaced findings that need a specialist to review. Your risk level has not
+                    changed, but your plan below helps you arrange that review.
+                  </>
+                ) : (
+                  <>
+                    changed your risk from{" "}
+                    <span className="font-bold">{output.conflict_context.original_score}</span> to{" "}
+                    <span className="font-bold">{output.conflict_context.new_score}</span>. Your plan
+                    below reflects this updated picture.
+                  </>
+                )}
+              </p>
+            </div>
+          </section>
         )}
 
         {/* Follow-up plan */}
         {output.follow_up_plan.length > 0 && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <h2 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wide">
+          <section className="bg-surface-container-lowest p-stack-md rounded-xl soft-elevation border border-outline-variant/30">
+            <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest mb-stack-md">
               Your Action Plan
             </h2>
-            <div className="space-y-4">
-              {output.follow_up_plan.map((step: FollowUpItem, i: number) => (
-                <div key={i} className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 font-bold text-xs flex items-center justify-center flex-shrink-0">
+            <div className="flex flex-col gap-stack-md">
+              {output.follow_up_plan.map((step: FollowUpItem, i: number) => {
+                const isLast = i === output.follow_up_plan.length - 1;
+                return (
+                  <div key={i} className="flex gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold">
                       {i + 1}
                     </div>
-                    {i < output.follow_up_plan.length - 1 && (
-                      <div className="w-px flex-1 bg-stone-200 mt-1.5" />
-                    )}
+                    <div
+                      className={`flex-1 ${
+                        isLast ? "" : "pb-stack-md border-b border-outline-variant/30"
+                      }`}
+                    >
+                      <span className="text-label-sm text-on-surface-variant">
+                        {formatDate(step.date)}
+                      </span>
+                      <p className="text-[18px] leading-snug font-semibold text-on-surface my-1">
+                        {step.action}
+                      </p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
+                        {step.contact && (
+                          <a
+                            href={`tel:${step.contact}`}
+                            className="text-primary font-bold flex items-center gap-1 hover:underline min-h-[44px]"
+                          >
+                            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                              call
+                            </span>
+                            {step.contact}
+                          </a>
+                        )}
+                        {step.location && (
+                          <span className="text-outline text-label-md flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                              location_on
+                            </span>
+                            {step.location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 pb-4">
-                    <p className="text-xs font-mono text-stone-400 mb-1">
-                      {formatDate(step.date)}
-                    </p>
-                    <p className="text-sm text-slate-800 font-medium leading-snug">
-                      {step.action}
-                    </p>
-                    {step.location && (
-                      <p className="text-xs text-stone-500 mt-1">{step.location}</p>
-                    )}
-                    {step.contact && (
-                      <a
-                        href={`tel:${step.contact}`}
-                        className="text-xs text-teal-700 hover:underline mt-0.5 inline-block"
-                      >
-                        {step.contact}
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Reminder schedule */}
-        {output.reminder_schedule.length > 0 && (
-          <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
-            <h2 className="text-sm font-bold text-amber-900 mb-3 uppercase tracking-wide">
-              Reminders
-            </h2>
-            <div className="space-y-3">
-              {output.reminder_schedule.map((r, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-1.5" />
-                  <div>
-                    <p className="text-xs font-mono text-amber-700 mb-0.5">
-                      {formatDate(r.date)}
-                    </p>
-                    <p className="text-sm text-amber-900">{r.message}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Reminders now live in the notification bell (Navbar) and banner, not inline here. */}
 
         {/* Family message drafts */}
         {messageLangs.length > 0 && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <h2 className="text-sm font-bold text-slate-900 mb-1 uppercase tracking-wide">
+          <section className="bg-surface-container-lowest p-stack-md rounded-xl soft-elevation border border-outline-variant/30">
+            <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest mb-stack-sm">
               Message for a Loved One
             </h2>
-            <p className="text-xs text-stone-400 mb-4">
+            <p className="text-body-md text-on-surface-variant mb-stack-md">
               Share this with someone you trust. A message asking for support.
             </p>
 
@@ -194,10 +201,10 @@ export default function CompanionPage() {
                   aria-selected={activeLang === lang}
                   aria-controls="message-tabpanel"
                   id={`tab-${lang}`}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[44px] min-w-[44px] ${
+                  className={`px-4 py-1.5 rounded-full text-label-md border transition-all min-h-[44px] ${
                     activeLang === lang
-                      ? "bg-teal-800 text-white"
-                      : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      ? "bg-primary text-on-primary border-primary"
+                      : "border-outline-variant text-on-surface-variant hover:bg-surface-container-high"
                   }`}
                 >
                   {LANG_LABELS[lang] ?? lang}
@@ -210,69 +217,49 @@ export default function CompanionPage() {
               id="message-tabpanel"
               role="tabpanel"
               aria-labelledby={`tab-${activeLang}`}
-              className="bg-stone-50 rounded-xl border border-stone-200 px-4 py-4 relative"
+              className="bg-surface-container p-stack-md rounded-xl border border-outline-variant/20 relative"
             >
-              <p className="text-sm text-slate-700 leading-relaxed pr-10">
-                {activeMessage}
-              </p>
+              <p className="text-body-md text-on-surface leading-relaxed pr-12">{activeMessage}</p>
               <button
                 onClick={() => handleCopy(activeMessage)}
-                className="absolute top-3 right-3 text-stone-400 hover:text-teal-700 transition-colors w-11 h-11 flex items-center justify-center rounded"
+                className="absolute top-3 right-3 w-11 h-11 flex items-center justify-center rounded-lg text-primary hover:bg-surface-container-highest transition-colors"
                 aria-label={copied ? "Message copied to clipboard" : "Copy message to clipboard"}
                 aria-live="polite"
               >
-                {copied ? (
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-emerald-500"
-                  >
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                  </svg>
-                )}
+                <span
+                  className={`material-symbols-outlined ${copied ? "text-secondary" : ""}`}
+                  aria-hidden="true"
+                >
+                  {copied ? "check" : "content_copy"}
+                </span>
               </button>
             </div>
-            {copied && (
-              <p className="text-xs text-emerald-600 mt-2">Copied to clipboard</p>
-            )}
-          </div>
+            {copied && <p className="text-label-sm text-secondary mt-2">Copied to clipboard</p>}
+          </section>
         )}
 
         {/* Closing note */}
-        <div className="bg-teal-50 rounded-2xl border border-teal-100 p-5">
-          <p className="text-sm text-teal-800 leading-relaxed text-center">
-            VERA will be here whenever you need to revisit your plan, ask more
-            questions, or find a new clinic. You are not alone in this.
+        <section className="bg-secondary-container/30 p-stack-md rounded-xl text-center border border-secondary/10">
+          <p className="text-body-lg text-secondary italic leading-relaxed">
+            VERA will be here whenever you need to revisit your plan, ask more questions, or find a
+            new clinic. You are not alone in this.
           </p>
-        </div>
+        </section>
 
-        <Link
-          href="/"
-          className="block text-center text-sm text-stone-400 hover:text-stone-600 transition-colors pb-4"
-        >
-          ← Back to home
-        </Link>
+        <div className="text-center mt-stack-sm">
+          <Link
+            href="/"
+            className="text-outline hover:text-primary transition-colors flex items-center justify-center gap-2 text-label-md min-h-[44px]"
+          >
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+              arrow_back
+            </span>
+            Back to home
+          </Link>
+        </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
@@ -291,11 +278,16 @@ function formatDate(dateStr: string): string {
 
 function LoadingState() {
   return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-700 rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-stone-500 text-sm">Building your follow-up plan…</p>
-        <p className="text-stone-400 text-xs mt-2">Drafting messages in 3 languages</p>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div role="status" aria-live="polite" className="text-center">
+        <div
+          className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"
+          aria-hidden="true"
+        />
+        <p className="text-body-md text-on-surface-variant">Building your follow-up plan...</p>
+        <p className="text-label-sm text-on-surface-variant/60 mt-2">
+          Drafting messages in 3 languages
+        </p>
       </div>
     </div>
   );
@@ -303,11 +295,11 @@ function LoadingState() {
 
 function ErrorState({ message }: { message: string }) {
   return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center px-6">
+    <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="text-center max-w-sm">
-        <p className="text-stone-600 mb-4">{message}</p>
-        <Link href="/learn" className="text-teal-700 font-medium hover:underline">
-          ← Back to education
+        <p className="text-body-md text-on-surface-variant mb-6">{message}</p>
+        <Link href="/care" className="text-label-md text-primary font-semibold hover:underline">
+          Back to Find Care
         </Link>
       </div>
     </div>

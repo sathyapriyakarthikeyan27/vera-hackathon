@@ -3,10 +3,14 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import logging
+
 from agents.companion_agent import agent as companion_agent
 from services.session_store import get_session
 from services.database import insert_checkin
-from services import gemini
+from services import gemini, reminder_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,6 +29,20 @@ async def generate_followup(body: FollowupRequest):
     result = await companion_agent.generate_followup(body.session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Materialize the reminder schedule into durable, deduped reminder rows so the
+    # notification bell can surface them. Non-fatal: never break the followup response.
+    try:
+        session = await get_session(body.session_id)
+        user_id = session.get("user_id") if session else None
+        await reminder_store.materialize(
+            session_id=body.session_id,
+            user_id=str(user_id) if user_id else None,
+            reminder_schedule=result.get("reminder_schedule") or [],
+        )
+    except Exception:
+        logger.warning("Reminder materialization failed for session %s", body.session_id, exc_info=False)
+
     return result
 
 
