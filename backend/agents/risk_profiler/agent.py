@@ -3,21 +3,21 @@ Risk Profiler Agent.
 Uses Gemini 2.0 Flash for structured medical risk assessment and plain-language summaries.
 """
 
-import asyncio
 import datetime
-import json
 import logging
 from typing import Optional
 
+from models.risk import RISK_LEVELS, RISK_LEVEL_RANK
 from services.session_store import get_session, update_session
 from services import gemini
+from . import prompts
 from .questions import QUESTIONS, format_question
 
 logger = logging.getLogger(__name__)
 
 def _current_year() -> int:
     return datetime.date.today().year
-_VALID_LEVELS = {"Low", "Moderate", "High", "Urgent"}
+_VALID_LEVELS = set(RISK_LEVELS)
 
 _FALLBACK_SUMMARY = (
     "Based on your answers, I've mapped your cancer risk profile and found some important "
@@ -108,6 +108,9 @@ async def reconcile(session_id: str) -> Optional[dict]:
         "pending_signals": [],
         "reconciled": True,
         "conflict": conflict_obj,
+        # Audit trail: which model and prompt produced this reconciliation.
+        "model": gemini.GEMINI_FLASH,
+        "prompt_version": prompts.RECONCILE_PROMPT_VERSION,
     }
 
     updated_risk_profile = {**risk_profile, "risk_level": verdict["final_score"]}
@@ -136,8 +139,6 @@ async def reconcile(session_id: str) -> Optional[dict]:
 async def _reconcile_signals(
     original_score: str, pending_signals: list, original_reasoning: str, answers: dict
 ) -> dict:
-    _LEVEL_RANK = {"Low": 0, "Moderate": 1, "High": 2, "Urgent": 3}
-
     signals_text = "\n".join(
         f"- Severity: {s.get('severity', 'unknown')}, "
         f"Findings: {', '.join(s.get('anomalies') or []) or 'none'}, "
@@ -147,52 +148,24 @@ async def _reconcile_signals(
     )
 
     profile_context = _build_profile_context(answers)
-    cancer_types = ", ".join(
-        (answers.get("risk_profile") or {}).get("cancer_types_flagged") or []
-    ) or "not specified"
 
-    prompt = f"""Compare a person's original cancer risk profile against new clinical signals from an uploaded medical document. Decide whether the new findings change the risk level.
-
-Person profile:
-{profile_context}
-
-Original risk level: {original_score}
-Original clinical reasoning: {original_reasoning or 'Not available'}
-
-New clinical signals from uploaded document:
-{signals_text}
-
-Consider this person's specific risk factors (age, gender, family history, smoking history) when evaluating whether the new signals are clinically significant for them. A high-severity finding in someone with a family history of that cancer type should carry more weight than in someone with no such history.
-
-Output ONE of three verdicts as valid JSON only — no prose, no markdown:
-
-Verdict A — signals confirm original (use when severity is low and no urgency):
-{{"final_score": "{original_score}", "conflict": false, "message": "Your report findings are consistent with your existing risk profile."}}
-
-Verdict B — signals escalate risk (use when severity is high OR urgency_flag is true AND consistent with this person's risk profile):
-{{"final_score": "High", "conflict": true, "reason": "Your uploaded report contains findings that suggest a higher risk level than your initial profile indicated. Given your family history and screening gap, this needs prompt attention.", "message": "I've updated your risk assessment based on your report."}}
-
-Verdict C — mixed or uncertain signals (use when confidence is below 0.6 or signals are ambiguous given this person's profile):
-{{"final_score": "{original_score}", "conflict": true, "uncertain": true, "reason": "Your report contains some findings that need a specialist to review. I can not be certain whether they change your overall risk level.", "message": "I have noted some findings in your report that warrant a specialist follow-up."}}
-
-Return ONLY the JSON object."""
+    prompt = prompts.reconcile_prompt(
+        profile_context=profile_context,
+        original_score=original_score,
+        original_reasoning=original_reasoning,
+        signals_text=signals_text,
+    )
 
     try:
-        raw = await gemini.generate(prompt)
-        text = raw.strip()
-        if text.startswith("```"):
-            parts_list = text.split("```")
-            text = parts_list[1] if len(parts_list) > 1 else text
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
+        raw = await gemini.generate_json(prompt)
+        result = gemini.parse_json(raw)
         if result.get("final_score") not in _VALID_LEVELS:
             result["final_score"] = original_score
         return result
     except Exception:
         any_high = any(s.get("severity") == "high" or s.get("urgency_flag") for s in pending_signals)
         if any_high:
-            new_score = "High" if _LEVEL_RANK.get(original_score, 1) < 2 else original_score
+            new_score = "High" if RISK_LEVEL_RANK.get(original_score, 1) < RISK_LEVEL_RANK["High"] else original_score
             return {
                 "final_score": new_score,
                 "conflict": new_score != original_score,
@@ -246,7 +219,7 @@ async def process_answer(session_id: str, question_id: str, answer: str, key: Op
             completed.append("risk_profiler")
         risk_assessment = {
             "score": risk_profile["risk_level"],
-            "confidence": 0.8,
+            "confidence": _profile_confidence(answers, risk_profile.get("engine", "")),
             "reasoning": risk_profile.get("ai_reasoning", ""),
             "source": "profile_only",
             "pending_signals": [],
@@ -269,11 +242,23 @@ async def process_answer(session_id: str, question_id: str, answer: str, key: Op
     return {"complete": False, "question": question, "total": MAX_ASSESSMENT_QUESTIONS}
 
 
+def _profile_confidence(answers: dict, engine: str) -> float:
+    """
+    Heuristic confidence: a data-completeness proxy over the answers that
+    drive the score, NOT a calibrated probability. Capped at 0.8 because a
+    questionnaire-only assessment should never present near-certainty.
+    Rule-fallback scoring is cruder than the model path, so it is docked.
+    """
+    key_drivers = ("age_group", "gender", "family_history", "smoking", "last_screening")
+    present = sum(1 for k in key_drivers if answers.get(k))
+    confidence = 0.35 + 0.09 * present
+    if engine != "gemini":
+        confidence -= 0.15
+    return round(max(0.2, min(0.8, confidence)), 2)
+
+
 async def _compute_profile(answers: dict) -> dict:
-    gemini_result, _ = await asyncio.gather(
-        _gemini_assess(answers),
-        asyncio.sleep(0),
-    )
+    gemini_result = await _gemini_assess(answers)
 
     risk_level = gemini_result.get("risk_level", "Moderate")
     if risk_level not in _VALID_LEVELS:
@@ -291,6 +276,8 @@ async def _compute_profile(answers: dict) -> dict:
         fallback=_FALLBACK_SUMMARY,
     )
 
+    engine = gemini_result.get("engine", "rule_fallback")
+
     return {
         "risk_level": risk_level,
         "risk_score": risk_score,
@@ -299,6 +286,15 @@ async def _compute_profile(answers: dict) -> dict:
         "timeline": timeline,
         "plain_language_summary": summary,
         "ai_reasoning": reasoning,
+        # Audit trail: which engine, model, and prompt/rubric versions produced
+        # this assessment. "rule_fallback" means Gemini was unavailable and the
+        # deterministic rubric scored instead.
+        "engine": engine,
+        "model": gemini.GEMINI_FLASH if engine == "gemini" else None,
+        "prompt_versions": {
+            "assess": prompts.ASSESS_PROMPT_VERSION if engine == "gemini" else RUBRIC_VERSION,
+            "summary": prompts.SUMMARY_PROMPT_VERSION,
+        },
         "disclaimer": (
             "This is not a medical diagnosis. VERA provides risk awareness only. "
             "Please consult a qualified doctor."
@@ -333,40 +329,15 @@ async def _gemini_assess(answers: dict) -> dict:
     if hpv_line:
         full_profile += f"\n{hpv_line}"
 
-    prompt = f"""Assess cancer screening risk for the following patient profile and return structured JSON.
-
-Patient profile:
-{full_profile}
-
-Return ONLY valid JSON — no prose, no markdown fences:
-{{
-  "risk_level": "Moderate",
-  "risk_score": 6,
-  "cancer_types_flagged": [""],
-  "screening_gap_years": 4,
-  "reasoning": "One sentence explaining the primary risk factors for this specific person.",
-  "recommendations": "One sentence on the most urgent recommended next step for this person."
-}}
-
-Guidelines:
-- risk_level must be exactly one of: Low, Moderate, High, Urgent
-- Flag High or Urgent if the person has a family history of that cancer type AND a screening gap > 3 years
-- cancer_types_flagged must reflect this person's actual risk factors (age, gender, family history, smoking)
-- Do not list cancer types unrelated to this person's profile
-- This is for health awareness only, not clinical diagnosis"""
+    prompt = prompts.assess_prompt(full_profile)
 
     try:
-        import google.generativeai as genai
-        gemini._configure()
-        m = genai.GenerativeModel(
-            gemini.GEMINI_FLASH,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                temperature=0.1,
-            ),
-        )
-        raw = await gemini._generate_with_retry(m, prompt)
-        return json.loads(raw)
+        raw = await gemini.generate_json(prompt, temperature=0.1)
+        result = gemini.parse_json(raw)
+        if not isinstance(result, dict):
+            raise ValueError("assessment output was not a JSON object")
+        result["engine"] = "gemini"
+        return result
     except Exception as exc:
         logger.warning(
             "Risk assessment failed (model=%s): %s — using rule-based fallback",
@@ -375,12 +346,28 @@ Guidelines:
         return _rule_based_fallback(answers)
 
 
+# Version tag for the deterministic rubric below. Stored with every fallback
+# assessment so scores remain traceable to the exact rule set that produced them.
+RUBRIC_VERSION = "fallback-v2"
+
+
 def _rule_based_fallback(answers: dict) -> dict:
-    """Deterministic fallback used when Gemini is unavailable or returns invalid JSON."""
+    """
+    Deterministic fallback used when Gemini is unavailable or returns invalid JSON.
+
+    Each rule cites the screening guidance that motivates it. The POINT WEIGHTS
+    and level thresholds are engineering choices and are NOT clinically
+    validated — clinician sign-off is an open gate (no reviewer available yet).
+    Awareness-only output; never presented as diagnosis.
+    """
     score = 0
     cancer: set[str] = set()
     gender = answers.get("gender", "")
+    age_group = answers.get("age_group", "")
 
+    # First-degree family history is the strongest signal we collect: guidance
+    # moves screening earlier and more frequent for affected cancer types
+    # (e.g. NCCN colorectal: start at 40 with an affected first-degree relative).
     fh = answers.get("family_history", "")
     if fh == "yes_breast_ovarian":
         score += 3; cancer.update(["breast", "ovarian"])
@@ -391,24 +378,51 @@ def _rule_based_fallback(answers: dict) -> dict:
     elif fh == "yes_other":
         score += 1
 
+    # Overdue screening: USPSTF intervals are 1-5 years depending on programme
+    # (mammography 2y, cervical 3-5y, colorectal 1-10y by method), so 3+ years
+    # unscreened means overdue for most programmes; "never" is furthest overdue.
     ls = answers.get("last_screening", "never")
     score += {"never": 4, "over_5yr": 3, "3_5yr": 2, "1_3yr": 1, "within_1yr": 0}.get(ls, 0)
-    score += {"no": 2, "unsure": 1, "yes": 0}.get(answers.get("hpv_vaccine", "no"), 0)
-    score += {"current": 2, "former": 1, "never": 0}.get(answers.get("smoking", "never"), 0)
-    score += {"45_54": 2, "55_plus": 3, "35_44": 1}.get(answers.get("age_group", ""), 0)
 
-    if gender == "male":
-        age_group = answers.get("age_group", "")
+    # HPV vaccination reduces cervical cancer risk (WHO cervical cancer
+    # elimination strategy); relevant to people with a cervix.
+    if gender == "female":
+        score += {"no": 2, "unsure": 1, "yes": 0}.get(answers.get("hpv_vaccine", "no"), 0)
+
+    # Smoking: primary lung cancer risk factor (USPSTF 2021 LDCT criteria) and
+    # elevates risk across several other cancers.
+    score += {"current": 2, "former": 1, "never": 0}.get(answers.get("smoking", "never"), 0)
+
+    # Age: screening programmes begin at 40-50 (breast 40, colorectal 45,
+    # lung 50) and most cancer incidence rises with age.
+    score += {"45_54": 2, "55_plus": 3, "35_44": 1}.get(age_group, 0)
+
+    # Obesity is an established risk factor for several cancers (IARC 2016
+    # handbook: colorectal, breast, and others).
+    bmi = answers.get("bmi")
+    if isinstance(bmi, (int, float)) and bmi >= 30:
+        score += 1
+
+    # Cancer types to monitor, by guideline age/eligibility:
+    if age_group in ("45_54", "55_plus"):
+        cancer.add("colorectal")            # USPSTF 2021: screen from 45
+    if gender == "male" and age_group == "55_plus":
+        cancer.add("prostate")              # USPSTF 2018: discuss at 55-69
+    if answers.get("smoking") in ("current", "former"):
+        cancer.add("lung")                  # USPSTF 2021 LDCT criteria signal
+    if gender == "female":
+        cancer.add("cervical")              # USPSTF/WHO: screen 21-65
         if age_group in ("45_54", "55_plus"):
-            cancer.add("colorectal")
-            if age_group == "55_plus":
-                cancer.add("prostate")
-        if answers.get("smoking") in ("current", "former"):
-            cancer.add("lung")
-    elif gender == "female":
-        cancer.add("cervical")
-    else:
+            cancer.add("breast")            # USPSTF 2024: mammography 40-74
+    if not cancer:
         cancer.add("colorectal")
+
+    # A reported symptom or concern always warrants at least a Moderate
+    # recommendation to get it looked at (VERA never triages symptoms itself).
+    symptoms = answers.get("symptoms")
+    has_symptoms = bool(symptoms) and symptoms != "skip"
+    if has_symptoms:
+        score = max(score, 4)
 
     gap = {"within_1yr": 1, "1_3yr": 2, "3_5yr": 4, "over_5yr": 6, "never": None}.get(ls)
     level = "Urgent" if score >= 10 else "High" if score >= 7 else "Moderate" if score >= 4 else "Low"
@@ -420,6 +434,7 @@ def _rule_based_fallback(answers: dict) -> dict:
         "screening_gap_years": gap,
         "reasoning": "Assessed from screening history, family history, and known clinical risk factors.",
         "recommendations": "Schedule a free screening at the nearest government hospital.",
+        "engine": "rule_fallback",
     }
 
 
@@ -447,25 +462,21 @@ def _summary_prompt(answers: dict, risk_level: str, cancer_types: list, reasonin
 
     name_line = f"Their name is {name}." if name else ""
 
-    return f"""You are VERA, a warm and caring health companion. Write 2-3 sentences in plain, conversational language to explain a cancer risk assessment to a person.
-
-{name_line}
-Person: {person_context}.
-Medical assessment: {reasoning}
-Risk level: {risk_level}. Cancer types to be aware of: {types_text}.
-
-Rules:
-- Address the person directly as "you" and "your" throughout
-- Reference their actual profile (age, smoking, family history) to make it feel personal and relevant
-- Explain what {risk_level} risk means in everyday language — no medical jargon
-- End with one genuinely encouraging sentence: a concrete, free action is available
-- Never diagnose. Never say "you have cancer." Never alarm unnecessarily.
-- Maximum 3 sentences. No em dashes."""
+    return prompts.summary_prompt(
+        name_line=name_line,
+        person_context=person_context,
+        reasoning=reasoning,
+        risk_level=risk_level,
+        types_text=types_text,
+    )
 
 
 def _build_timeline(answers: dict) -> list[dict]:
-    gap_map = {"within_1yr": 2025, "1_3yr": 2024, "3_5yr": 2022, "over_5yr": 2020, "never": None}
-    last_year = gap_map.get(answers.get("last_screening", "never"))
+    year = _current_year()
+    # Offsets from the current year for each screening-recency answer.
+    gap_offsets = {"within_1yr": 0, "1_3yr": 1, "3_5yr": 3, "over_5yr": 5, "never": None}
+    offset = gap_offsets.get(answers.get("last_screening", "never"))
+    last_year = year - offset if offset is not None else None
 
     cancer_types = answers.get("cancer_types_flagged") or []
     primary_screening = "colorectal screening" if "colorectal" in cancer_types else "cancer screening"
@@ -474,14 +485,14 @@ def _build_timeline(answers: dict) -> list[dict]:
     if last_year:
         timeline.append({"year": last_year, "event": "Last cancer screening", "status": "completed"})
         missed = last_year + 3
-        while missed < _current_year():
+        while missed < year:
             timeline.append({"year": missed, "event": f"Recommended {primary_screening}", "status": "missed"})
             missed += 3
     else:
-        timeline.append({"year": 2020, "event": "First recommended screening (not completed)", "status": "missed"})
-        timeline.append({"year": 2023, "event": f"Recommended {primary_screening}", "status": "missed"})
+        timeline.append({"year": year - 5, "event": "First recommended screening (not completed)", "status": "missed"})
+        timeline.append({"year": year - 2, "event": f"Recommended {primary_screening}", "status": "missed"})
 
-    timeline.append({"year": _current_year(), "event": "Now. VERA recommends action.", "status": "urgent"})
+    timeline.append({"year": year, "event": "Now. VERA recommends action.", "status": "urgent"})
     return timeline
 
 
@@ -506,47 +517,20 @@ async def generate_next_question(answers: dict, question_number: int) -> dict:
     elif gender == "male":
         gender_note = "\n- For males age 45+: consider prostate PSA screening"
 
-    prompt = f"""You are VERA, a caring health companion. Generate question #{question_number} of {MAX_ASSESSMENT_QUESTIONS} for a cancer risk assessment.
-
-Patient profile:
-- Gender: {gender}
-- Age group: {age_group}
-- BMI: {bmi_text}
-- Location: {location}
-
-Previous assessment answers:
-{prev_text}
-
-Rules:
-- Write in VERA's warm, direct voice using "you"/"your"
-- Do NOT repeat any already-answered topic
-- Do NOT repeat the same question or topic again
-- Do NOT use any greetings like Hi! or Hi there in the question
-- Cover: family cancer history, last screening, smoking, alcohol, physical activity, or gender/age-specific screenings{gender_note}
-- If this IS question {MAX_ASSESSMENT_QUESTIONS}: open-ended health concerns, type=text, optional=true, options=[]
-- Otherwise: type=choice, 3-5 short clear options
-
-Return ONLY valid JSON (no markdown fences, no explanation):
-{{
-  "id": "q{question_number}",
-  "question": "Warm question text here?",
-  "type": "choice",
-  "key": "snake_case_key",
-  "options": [{{"value": "val", "label": "Label"}}],
-  "optional": false,
-  "why_we_ask": "One sentence explaining why this matters for cancer risk."
-}}"""
+    prompt = prompts.next_question_prompt(
+        question_number=question_number,
+        max_questions=MAX_ASSESSMENT_QUESTIONS,
+        gender=gender,
+        age_group=age_group,
+        bmi_text=bmi_text,
+        location=location,
+        prev_text=prev_text,
+        gender_note=gender_note,
+    )
 
     try:
-        raw = await gemini.generate(prompt)
-        text = raw.strip()
-        if "```" in text:
-            for part in text.split("```"):
-                stripped = part.strip().lstrip("json").strip()
-                if stripped.startswith("{"):
-                    text = stripped
-                    break
-        result = json.loads(text)
+        raw = await gemini.generate_json(prompt, temperature=0.4)
+        result = gemini.parse_json(raw)
         result["id"] = f"q{question_number}"
         if "type" not in result:
             result["type"] = "text" if is_final else "choice"

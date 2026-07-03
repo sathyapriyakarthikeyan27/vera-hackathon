@@ -117,3 +117,25 @@ async def test_confidence_coerced_to_float():
 
     assert isinstance(result["confidence"], float)
     assert result["confidence"] == 0.8
+
+
+async def test_non_numeric_confidence_does_not_crash():
+    """A non-numeric confidence from the model must not raise — default 0.7."""
+    payload = {"anomalies": ["some finding"], "severity": "high",
+               "confidence": "very confident", "specialist_signal": None,
+               "urgency_flag": True}
+    with _mock_gemini(json.dumps(payload)):
+        result = await _extract_signals(b"fake", "application/pdf")
+
+    assert result["confidence"] == 0.7
+    assert result["severity"] == "high"
+    assert result["urgency_flag"] is True
+
+
+async def test_invalid_severity_defaults_to_medium():
+    payload = {"anomalies": [], "severity": "catastrophic", "confidence": 0.9,
+               "specialist_signal": None, "urgency_flag": False}
+    with _mock_gemini(json.dumps(payload)):
+        result = await _extract_signals(b"fake", "application/pdf")
+
+    assert result["severity"] == "medium"

@@ -11,6 +11,7 @@ from typing import Optional
 
 from services.session_store import get_session, update_session
 from services import gemini
+from . import prompts
 
 
 def _today() -> str:
@@ -177,81 +178,22 @@ async def _generate_plan(
 
     doc_label = document_filename or document_type or "uploaded medical document"
 
-    if conflict and conflict.get("uncertain"):
-        escalation_context = (
-            f"\nIMPORTANT CONTEXT: This person uploaded their {doc_label}, which surfaced "
-            f"findings that are mixed and need a specialist to review. Their risk level has NOT "
-            f"changed, so do NOT say it was updated or escalated. The greeting MUST acknowledge "
-            f"the {doc_label} and that a specialist should review these findings. The plan steps "
-            f"should prioritise booking a specialist review soon."
-        )
-        urgency_note = (
-            f"This person's {doc_label} surfaced uncertain findings. "
-            f"The first step must be to book a specialist review within 1 week."
-        )
-    elif conflict:
-        original = conflict.get("original_score", "Moderate")
-        new_score = conflict.get("new_score", risk_level)
-        escalation_context = (
-            f"\nIMPORTANT CONTEXT: This person's risk was recently updated. "
-            f"Their initial profile indicated {original} risk. After uploading their {doc_label}, "
-            f"VERA re-assessed and updated the risk to {new_score}. "
-            f"The greeting MUST acknowledge this change and specifically name the document ({doc_label}) "
-            f"that triggered it. The plan steps should reflect the urgency of {new_score} risk, "
-            f"not routine screening timelines."
-        )
-        urgency_note = (
-            f"This person's risk was escalated to {new_score} based on their {doc_label}. "
-            f"Action steps must be urgent, with first step within 1 week."
-        )
-    else:
-        escalation_context = ""
-        urgency_note = f"Schedule follow-up steps appropriately for {risk_level} risk over 6 weeks."
-
-    prompt = f"""Create a warm, personalised cancer screening follow-up plan for a real person.
-
-{name_line}
-Person profile:
-{person_context}
-
-Recommended specialist: {specialist}
-{clinic_info}
-Today's date: {_today()}.
-{escalation_context}
-
-The plan must feel personal. Reference their specific risk type ({types_text}) and their location ({location}).
-Use "you" and "your" throughout. {urgency_note}
-
-Return ONLY this JSON. No markdown:
-{{
-  "greeting": "1-2 warm sentences. If risk was escalated, acknowledge the specific document ({doc_label}) that changed the picture and what it means. Otherwise acknowledge their specific situation. Reference their name if given. No em dashes.",
-  "follow_up_plan": [
-    {{
-      "date": "YYYY-MM-DD",
-      "action": "Specific, actionable step. Reference the specialist type and their specific cancer risk.",
-      "location": "Clinic or hospital name if relevant, else null",
-      "contact": "Phone number if available, else null"
-    }}
-  ],
-  "reminder_schedule": [
-    {{
-      "date": "YYYY-MM-DD",
-      "message": "Short, warm reminder that feels personal to this person. No em dashes."
-    }}
-  ]
-}}
-
-Include 3 to 4 follow-up steps. Include 3 reminder messages at key moments."""
+    prompt = prompts.plan_prompt(
+        name_line=name_line,
+        person_context=person_context,
+        specialist=specialist,
+        clinic_info=clinic_info,
+        today=_today(),
+        types_text=types_text,
+        location=location,
+        risk_level=risk_level,
+        doc_label=doc_label,
+        conflict=conflict,
+    )
 
     try:
-        raw = await gemini.generate(prompt)
-        text = raw.strip()
-        if text.startswith("```"):
-            parts = text.split("```")
-            text = parts[1] if len(parts) > 1 else text
-            if text.startswith("json"):
-                text = text[4:]
-        return json.loads(text.strip())
+        raw = await gemini.generate_json(prompt, temperature=0.4)
+        return gemini.parse_json(raw)
     except Exception:
         return {
             "greeting": _default_greeting(user_name, conflict, doc_label),
@@ -275,33 +217,11 @@ async def _generate_family_messages(
         context_parts.append(gender)
     person_context = " ".join(context_parts) if context_parts else "person"
 
-    prompt = f"""Draft a short, warm message for a {person_context} to send to a trusted family member or close friend asking for support.
-
-Context: They have {risk_level.lower()} risk for {types_text} and need to book a free cancer screening at {clinic_name}.
-
-The message should:
-- Be 2 to 3 sentences
-- Feel natural, not medical or clinical
-- Explain they are taking a positive health step
-- Ask for support or accompaniment in a gentle way
-- Not mention cancer in an alarming way
-
-Return ONLY this JSON. No markdown:
-{{
-  "en": "Natural English message (2-3 sentences, no em dashes)",
-  "hi": "Natural Hindi message in Devanagari script (2-3 sentences)",
-  "ta": "Natural Tamil message in Tamil script (2-3 sentences)"
-}}"""
+    prompt = prompts.family_messages_prompt(person_context, risk_level, types_text, clinic_name)
 
     try:
-        raw = await gemini.generate(prompt)
-        text = raw.strip()
-        if text.startswith("```"):
-            parts = text.split("```")
-            text = parts[1] if len(parts) > 1 else text
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
+        raw = await gemini.generate_json(prompt, temperature=0.4)
+        result = gemini.parse_json(raw)
         return {
             "en": result.get("en", _FALLBACK_MESSAGES["en"]),
             "hi": result.get("hi", _FALLBACK_MESSAGES["hi"]),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useRequireAuth } from "@/lib/auth";
@@ -64,6 +65,7 @@ function Badge({ ok, okText, noText }: { ok: boolean; okText: string; noText: st
 
 export default function NotificationsPage() {
   useRequireAuth();
+  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -133,9 +135,10 @@ export default function NotificationsPage() {
         give_consent: consented,
       });
       setSaved(true);
+      // Let the success land, then return to the plan where reminders live.
+      setTimeout(() => router.push("/companion"), 1200);
     } catch {
       setError("Something went wrong saving your settings. Please try again.");
-    } finally {
       setSaving(false);
     }
   }
@@ -339,18 +342,32 @@ export default function NotificationsPage() {
           </p>
         )}
         {saved && (
-          <p className="text-body-md text-secondary mb-4" role="status">
-            Your settings are saved.
-          </p>
+          <div
+            className="mb-4 flex items-center gap-3 bg-secondary-container/40 border border-secondary-container rounded-2xl px-5 py-4"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className="material-symbols-outlined text-secondary"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+              aria-hidden="true"
+            >
+              check_circle
+            </span>
+            <div>
+              <p className="text-body-md font-semibold text-on-surface">Your reminder settings are saved.</p>
+              <p className="text-label-md text-on-surface-variant">Taking you back to your plan…</p>
+            </div>
+          </div>
         )}
 
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || saved}
           className="bg-primary text-on-primary px-8 py-3 rounded-full text-label-md font-bold disabled:opacity-60 min-h-[48px]"
         >
-          {saving ? "Saving..." : "Save settings"}
+          {saved ? "Saved" : saving ? "Saving..." : "Save settings"}
         </button>
       </main>
       <Footer />

@@ -1,10 +1,12 @@
 """Scheme Navigator Agent router."""
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from agents.scheme_navigator import agent as scheme_agent
 from agents.companion_agent import agent as companion_agent
+from routers.auth import get_current_user
+from services.authz import require_session_access
 
 router = APIRouter()
 
@@ -24,7 +26,12 @@ async def _pregen_companion(session_id: str) -> None:
 
 
 @router.post("/match")
-async def match_schemes(body: MatchRequest, background_tasks: BackgroundTasks):
+async def match_schemes(
+    body: MatchRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    await require_session_access(body.session_id, user)
     result = await scheme_agent.match(body.session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")

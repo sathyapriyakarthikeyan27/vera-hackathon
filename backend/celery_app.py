@@ -13,12 +13,15 @@ from celery import Celery
 BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/1")
 RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/2")
 DISPATCH_INTERVAL = float(os.getenv("REMINDER_DISPATCH_INTERVAL", "60"))
+# RAG source re-verification cadence. Screening policy changes slowly, so weekly by
+# default (in seconds). Overridable for testing.
+RAG_REVERIFY_INTERVAL = float(os.getenv("RAG_REVERIFY_INTERVAL", str(7 * 24 * 3600)))
 
 celery = Celery(
     "vera",
     broker=BROKER_URL,
     backend=RESULT_BACKEND,
-    include=["tasks.reminders"],
+    include=["tasks.reminders", "tasks.ingestion"],
 )
 
 celery.conf.update(
@@ -36,6 +39,10 @@ celery.conf.update(
         "dispatch-due-reminders": {
             "task": "reminders.dispatch_due",
             "schedule": DISPATCH_INTERVAL,
+        },
+        "reverify-rag-sources": {
+            "task": "rag.reverify_sources",
+            "schedule": RAG_REVERIFY_INTERVAL,
         },
     },
 )

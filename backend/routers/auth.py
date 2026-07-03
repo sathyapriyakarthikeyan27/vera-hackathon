@@ -18,6 +18,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from services import auth_store, security
 from services.email import send_email
+from services.ratelimit import rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -107,7 +108,7 @@ class ResetBody(BaseModel):
 
 # ── Email + password ─────────────────────────────────────────────────────────
 
-@router.post("/signup", status_code=201)
+@router.post("/signup", status_code=201, dependencies=[Depends(rate_limit("auth_signup", 10, 3600))])
 async def signup(body: SignupBody, response: Response):
     existing = await auth_store.get_user_by_email(body.email)
     if existing:
@@ -127,7 +128,7 @@ async def signup(body: SignupBody, response: Response):
     return {"user": user}
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit("auth_login", 10, 300))])
 async def login(body: LoginBody, response: Response):
     row = await auth_store.get_user_by_email(body.email)
     if not row or not security.verify_password(body.password, row.get("password_hash") or ""):
@@ -155,7 +156,7 @@ async def logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(rate_limit("auth_refresh", 60, 300))])
 async def refresh(request: Request, response: Response):
     token = request.cookies.get(COOKIE_REFRESH)
     if not token:
@@ -184,7 +185,7 @@ async def link_session(body: LinkSessionBody, user: dict = Depends(get_current_u
     return {"ok": ok}
 
 
-@router.post("/verify-email")
+@router.post("/verify-email", dependencies=[Depends(rate_limit("auth_verify_email", 20, 3600))])
 async def verify_email(body: TokenBody):
     user_id = await auth_store.consume_auth_token("email_verify", body.token)
     if not user_id:
@@ -193,7 +194,7 @@ async def verify_email(body: TokenBody):
     return {"ok": True}
 
 
-@router.post("/request-reset")
+@router.post("/request-reset", dependencies=[Depends(rate_limit("auth_request_reset", 5, 900))])
 async def request_reset(body: EmailBody):
     # Always 200 — never reveal whether an account exists.
     row = await auth_store.get_user_by_email(body.email)
@@ -211,7 +212,7 @@ async def request_reset(body: EmailBody):
     return {"ok": True}
 
 
-@router.post("/reset")
+@router.post("/reset", dependencies=[Depends(rate_limit("auth_reset", 10, 3600))])
 async def reset(body: ResetBody):
     user_id = await auth_store.consume_auth_token("password_reset", body.token)
     if not user_id:
@@ -297,6 +298,10 @@ async def google_callback(code: Optional[str] = None, state: Optional[str] = Non
 
     provider_account_id = info.get("sub")
     email = (info.get("email") or "").lower()
+    # Trust the verified flag only when Google explicitly asserts it. An
+    # unverified Google email must never be matched against an existing local
+    # account — that is a classic OAuth account-takeover vector.
+    email_verified = info.get("email_verified") is True
     if not provider_account_id or not email:
         return RedirectResponse(f"{_app_base_url()}/login?error=oauth")
 
@@ -304,11 +309,13 @@ async def google_callback(code: Optional[str] = None, state: Optional[str] = Non
     if not user:
         existing = await auth_store.get_user_by_email(email)
         if existing:
+            if not email_verified:
+                return RedirectResponse(f"{_app_base_url()}/login?error=oauth_unverified")
             user = auth_store._public_user(existing)
         else:
             user = await auth_store.create_user(
                 email=email, password_hash=None, name=info.get("name"),
-                email_verified=bool(info.get("email_verified", True)),
+                email_verified=email_verified,
             )
         await auth_store.link_oauth_account(user["id"], "google", provider_account_id)
 

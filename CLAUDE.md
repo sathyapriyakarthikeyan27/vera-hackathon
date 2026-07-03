@@ -180,19 +180,28 @@ Every screen must meet WCAG 2.1 Level AA. Accessibility is a core product requir
 
 **Inputs:** User profile (age, gender, family history, conditions, medications, symptoms if provided)
 
-**Output:** Risk level — `low` | `medium` | `high`
+**Output:** Risk level — `Low` | `Moderate` | `High` | `Urgent`
+(canonical constants in `backend/models/risk.py` — agents, prompts, and the frontend `RiskProfile` type use these exact values)
 
 **Behaviour by risk level:**
 
 | Risk Level | Action |
 |---|---|
 | Low | Education content + periodic check-in scheduled via Agent 4 |
-| Medium | Screening recommendation + Agent 2 activated |
+| Moderate | Screening recommendation + Agent 2 activated |
 | High | Urgent specialist referral + Agent 2 activated immediately |
-| High + symptoms present | Urgent referral flagged as time-sensitive. Show emergency contact information. |
+| Urgent (high risk + time-sensitive signals or symptoms) | Referral flagged as time-sensitive. Show emergency contact information. |
+
+**Clinical validation status (be honest about this):**
+Scoring is anchored to published screening guidance (USPSTF, UK NSC, WHO — see
+`agents/risk_profiler/prompts.py` v2 and the cited rules in `_rule_based_fallback`),
+but the weights and thresholds are NOT clinically validated and no clinician has
+signed off yet. Do not describe VERA's scoring as clinically validated anywhere in
+user-facing content. Clinician review is an open gate; every assessment stores its
+engine, model, and prompt/rubric version for later audit.
 
 **Risk Explainability (important):**
-Every risk output must include a plain-language explanation of WHY VERA assigned that score. Example: "I rated your risk as medium because of your family history of colorectal cancer and the fact that you have not had a colonoscopy in over 5 years." Users need this, and it keeps VERA's reasoning transparent and auditable.
+Every risk output must include a plain-language explanation of WHY VERA assigned that score. Example: "I rated your risk as Moderate because of your family history of colorectal cancer and the fact that you have not had a colonoscopy in over 5 years." Users need this, and it keeps VERA's reasoning transparent and auditable.
 
 **Specialist routing logic:**
 
@@ -214,7 +223,7 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 
 **Outputs (in order of priority):**
 1. Relevant government scheme for user's country
-2. Nearest free screening camp (if medium risk)
+2. Nearest free screening camp (if Moderate risk)
 3. Nearest reputed hospital / specialist (if high risk)
 4. Specialist type — not just "see a doctor", but exactly which specialist and why
 5. Downloadable care plan PDF (name, risk level, recommended specialist, scheme, next steps)
@@ -288,8 +297,9 @@ Every risk output must include a plain-language explanation of WHY VERA assigned
 - Used to personalise future messages and surface patterns over time
 
 **Proactive check-ins:** Check-ins fire on a real schedule (FastAPI BackgroundTasks). There is no
-"Simulate 3 Days Later" button in the production UI. A hidden internal endpoint (`/companion/checkin`)
-may remain for testing only — it must not be exposed in the user-facing UI.
+"Simulate 3 Days Later" button in the production UI. The internal `/companion/checkin` endpoint is
+auth-protected AND returns 404 unless `ENABLE_TEST_ENDPOINTS=true` (dev/staging only). It is not in
+the frontend API client.
 
 ---
 
@@ -408,7 +418,7 @@ Every agent reads from and writes to this shared object in PostgreSQL. Agent 1 i
 
 ```python
 risk_assessment = {
-    "score": "low" | "medium" | "high",  # Agent 1 owns this field
+    "score": "Low" | "Moderate" | "High" | "Urgent",  # Agent 1 owns this field
     "confidence": 0.0 to 1.0,
     "source": "profile_only" | "profile+records",
     "reasoning": str,                    # Plain-language explanation of score
@@ -429,7 +439,7 @@ risk_assessment = {
 
 ### Collaboration Mechanic 1 — Conflict Detection
 
-**The scenario:** Agent 1 scores a user as MEDIUM risk from their profile. The user later uploads a lab report. Agent 3 reads it and finds high-severity clinical signals. Agent 1 reconciles, conflict is detected, score changes to HIGH. The user sees the conflict surfaced explicitly.
+**The scenario:** Agent 1 scores a user as MODERATE risk from their profile. The user later uploads a lab report. Agent 3 reads it and finds high-severity clinical signals. Agent 1 reconciles, conflict is detected, score changes to HIGH. The user sees the conflict surfaced explicitly.
 
 **Why this matters:** The agents are not just passing data — they are checking each other's conclusions. A finding from one agent changes the output of another. That is genuine collaboration.
 
@@ -480,21 +490,21 @@ def get_agent1_mode(user_profile):
 ```python
 # Verdict A — Agreement (signals confirm original score)
 {
-    "final_score": "medium",
+    "final_score": "Moderate",
     "conflict": False,
     "reasoning": "Lab findings are consistent with your existing risk profile."
 }
 
 # Verdict B — Escalation (signals contradict original score)
 {
-    "final_score": "high",
+    "final_score": "High",
     "conflict": True,
     "reasoning": "Your lab report shows findings that indicate higher risk than your initial profile suggested."
 }
 
 # Verdict C — Uncertainty (signals are mixed)
 {
-    "final_score": "medium",
+    "final_score": "Moderate",
     "conflict": True,
     "uncertain": True,
     "reasoning": "Your report contains mixed signals. I recommend a follow-up with a specialist to get a clearer picture."
@@ -534,12 +544,12 @@ This moment is a key part of the experience. Make it visually distinct in the UI
 3. Agent 1 (initial mode) at /assessment
    AI-generated adaptive questions (6 questions, one at a time)
    Gemini generates each question based on gender/age_group/bmi/location/prior answers
-   Scores risk: MEDIUM
-   Writes to risk_assessment: score=medium, source=profile_only
+   Scores risk: MODERATE
+   Writes to risk_assessment: score=Moderate, source=profile_only
    Writes reasoning: plain-language explanation of score
          |
 4. Agent 2 activates
-   Shows medium-risk recommendation (screening, not urgent referral)
+   Shows Moderate-risk recommendation (screening, not urgent referral)
    Shows Ayushman Bharat / NHIA / NHS scheme
          |
 5. User uploads colonoscopy report
@@ -553,12 +563,12 @@ This moment is a key part of the experience. Make it visually distinct in the UI
 7. Router sees pending_signals, routes to Agent 1 (reconcile mode)
          |
 8. Agent 1 (reconcile mode)
-   Original: MEDIUM | New signal: HIGH
+   Original: MODERATE | New signal: HIGH
    CONFLICT DETECTED
-   Writes: score=high, conflict={original: medium, new: high, reason: "..."}
+   Writes: score=High, conflict={original: Moderate, new: High, reason: "..."}
          |
 9. User sees conflict card:
-   "I've updated your assessment from MEDIUM to HIGH based on your report."
+   "I've updated your assessment from MODERATE to HIGH based on your report."
          |
 10. Agent 2 activates with HIGH risk
     Nearest Gastroenterologist
@@ -572,7 +582,13 @@ This moment is a key part of the experience. Make it visually distinct in the UI
 
 - Health records never stored. Processed in memory, deleted immediately after response.
 - Use explicit `try/finally` block for file deletion.
-- User profile encrypted at rest
+- Health data encrypted at rest: field-level AES (Fernet) via `services/crypto.py`.
+  Encrypted: `sessions.user_name`, the health JSONB columns (`risk_state`,
+  `risk_assessment`, `risk_profile`, `records_output`, `companion_output`), and
+  `checkin_memory.content`. Key: `VERA_ENCRYPTION_KEY` (required in production,
+  fail-closed at startup; losing the key = losing the data). Generic outputs
+  (`schemes_output`, `education_output`) and `reminders.message` are NOT encrypted;
+  reminders encryption is a tracked follow-up.
 - No PII in logs
 - Session-based processing for all medical documents
 - Session ID stored in localStorage (no auth tokens yet — see Authentication)

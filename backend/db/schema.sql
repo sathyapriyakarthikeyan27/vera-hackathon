@@ -170,3 +170,83 @@ CREATE INDEX IF NOT EXISTS idx_appointments_date   ON appointments(appointment_d
 CREATE INDEX IF NOT EXISTS idx_medications_active  ON medications(session_id, active);
 CREATE INDEX IF NOT EXISTS idx_checkin_session     ON checkin_memory(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_scheme_country      ON scheme_data(country);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- RAG corpus (Agent 2 real-source pipeline). Distinct from the legacy synthetic
+-- scheme_data above. Three tables, by design:
+--   source_documents — registry of real, licensed sources + freshness bookkeeping
+--   scheme_chunks     — chunked narrative text + embeddings (the "retrieve" corpus)
+--   scheme_facts      — safety-critical structured facts, gated on human sign-off
+-- The narrative goes to RAG; the numbers a wrong answer could harm someone with
+-- live in scheme_facts and are never surfaced until verified = TRUE.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Registry of every real source we ingest, with licensing + freshness tracking.
+CREATE TABLE IF NOT EXISTS source_documents (
+    id             SERIAL PRIMARY KEY,
+    source_key     VARCHAR(120) UNIQUE NOT NULL,   -- stable id, e.g. 'uk_nhs_cervical_screening'
+    title          VARCHAR(255) NOT NULL,
+    url            TEXT NOT NULL,
+    jurisdiction   VARCHAR(100) NOT NULL,          -- 'UK', 'India', 'Egypt'
+    source_type    VARCHAR(20)  NOT NULL,          -- 'html' | 'pdf'
+    publisher      VARCHAR(255) NOT NULL,          -- 'NHS', 'GOV.UK (UKHSA)'
+    license        VARCHAR(120) NOT NULL,          -- 'OGL-v3.0' (must be reuse-permitted)
+    cancer_types   TEXT[] NOT NULL DEFAULT '{}',
+    content_hash   VARCHAR(64),                    -- sha256 of normalized extracted text
+    published_date DATE,                           -- source's own "last reviewed" date if available
+    last_fetched   TIMESTAMPTZ,
+    last_verified  TIMESTAMPTZ,                    -- last time a human/auto pass confirmed the content
+    status         VARCHAR(20) NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'active', 'pending_review', 'stale', 'error')),
+    last_error     TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_source_jurisdiction ON source_documents(jurisdiction);
+CREATE INDEX IF NOT EXISTS idx_source_status       ON source_documents(status);
+
+-- Chunked narrative text + embeddings. This is the corpus the retriever searches.
+-- tsv is a generated column so hybrid (dense + full-text) search needs no app code
+-- to keep it in sync.
+CREATE TABLE IF NOT EXISTS scheme_chunks (
+    id             SERIAL PRIMARY KEY,
+    source_id      INTEGER NOT NULL REFERENCES source_documents(id) ON DELETE CASCADE,
+    chunk_index    INTEGER NOT NULL,
+    heading        TEXT,
+    content        TEXT NOT NULL,
+    token_estimate INTEGER,
+    embedding      vector(768),                    -- text-embedding-004, RETRIEVAL_DOCUMENT
+    tsv            tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(content, ''))) STORED,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (source_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_scheme_chunks_source ON scheme_chunks(source_id);
+CREATE INDEX IF NOT EXISTS idx_scheme_chunks_tsv    ON scheme_chunks USING GIN (tsv);
+-- NB: the HNSW vector index is created by rag_store.ensure_rag_indexes(), not here,
+-- so an older pgvector (no HNSW support) degrades to a sequential scan instead of
+-- breaking startup.
+
+-- Safety-critical structured facts. Auto-extracted as verified = FALSE, and never
+-- surfaced to users until a human signs off. This is the gate that stops a changed
+-- eligibility age from reaching users unreviewed.
+CREATE TABLE IF NOT EXISTS scheme_facts (
+    id               SERIAL PRIMARY KEY,
+    source_id        INTEGER REFERENCES source_documents(id) ON DELETE SET NULL,
+    jurisdiction     VARCHAR(100) NOT NULL,
+    programme        VARCHAR(255) NOT NULL,        -- 'NHS Cervical Screening Programme'
+    cancer_type      VARCHAR(50)  NOT NULL,        -- 'cervical'
+    sex              VARCHAR(20)  NOT NULL DEFAULT 'all',   -- 'female' | 'male' | 'all'
+    eligible_age_min INTEGER,
+    eligible_age_max INTEGER,
+    interval_months  INTEGER,                      -- screening interval, null if n/a
+    cost             VARCHAR(50),                  -- 'free'
+    method           VARCHAR(255),                 -- 'HPV primary screening', 'FIT home kit'
+    notes            TEXT,
+    verified         BOOLEAN NOT NULL DEFAULT FALSE,  -- human sign-off gate
+    verified_by      VARCHAR(255),
+    verified_at      TIMESTAMPTZ,
+    source_url       TEXT,
+    content_hash     VARCHAR(64),                  -- hash of the source chunk this was drawn from
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_scheme_facts_lookup   ON scheme_facts(jurisdiction, cancer_type);
+CREATE INDEX IF NOT EXISTS idx_scheme_facts_verified ON scheme_facts(verified);

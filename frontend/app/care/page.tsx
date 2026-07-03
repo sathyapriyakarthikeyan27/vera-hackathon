@@ -6,7 +6,7 @@ import { matchSchemes } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useRequireAuth } from "@/lib/auth";
-import type { SchemesOutput, Clinic, SchemeMatch } from "@/lib/api";
+import type { SchemesOutput, Clinic, SchemeMatch, CareDirectory } from "@/lib/api";
 
 const MOCK = false; // set to true to use mock data
 
@@ -62,6 +62,7 @@ export default function CarePage() {
   useRequireAuth();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [schemes, setSchemes] = useState<SchemeMatch[]>([]);
+  const [directory, setDirectory] = useState<CareDirectory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +83,7 @@ export default function CarePage() {
         const result: SchemesOutput = await matchSchemes(sid);
         setClinics(result.nearest_clinics);
         setSchemes(result.matched_schemes ?? []);
+        setDirectory(result.care_directory ?? null);
       } catch {
         setError("Could not load care recommendations. Please try again.");
       } finally {
@@ -137,7 +139,7 @@ export default function CarePage() {
               info
             </span>
             <p className="text-body-lg text-on-surface-variant leading-relaxed">
-              Based on your <span className="font-bold text-primary">VERA Assessment</span>, I&apos;ve found hospitals and screening clinics near you. All facilities listed offer cancer screening services relevant to your risk profile.
+              Based on your <span className="font-bold text-primary">VERA Assessment</span>, here are the government screening schemes relevant to you, drawn from official health sources. I&apos;ll also point you to the official directory to find services near you.
             </p>
           </div>
         </div>
@@ -165,17 +167,57 @@ export default function CarePage() {
                   </div>
                   <p className="text-body-md text-on-surface-variant mb-2">{s.description}</p>
                   <p className="text-label-sm text-secondary font-medium">{s.eligibility_summary}</p>
+                  {s.why_matches && (
+                    <p className="text-body-sm text-on-surface-variant mt-2">{s.why_matches}</p>
+                  )}
+                  {(s.publisher || s.last_verified) && (
+                    <p className="text-label-sm text-on-surface-variant/70 mt-3 pt-3 border-t border-outline-variant">
+                      {s.publisher && <span>Source: {s.publisher}</span>}
+                      {s.publisher && s.last_verified && <span> · </span>}
+                      {s.last_verified && <span>Verified as of {s.last_verified}</span>}
+                    </p>
+                  )}
+                  {s.attribution && (
+                    <p className="text-label-sm text-on-surface-variant/50 mt-1">{s.attribution}</p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Clinics grid */}
+        {/* Find services near you */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-stack-lg">
           {clinics.map((clinic, i) => (
             <ClinicCard key={i} clinic={clinic} isTopMatch={i === 0} />
           ))}
+
+          {directory && (
+            <article className="bg-surface-container-lowest p-6 rounded-2xl border-l-4 border-primary soft-elevation flex flex-col space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-primary" style={{ fontSize: "2rem", fontVariationSettings: "'FILL' 1" }} aria-hidden="true">
+                  location_on
+                </span>
+                <h2 className="text-headline-md text-on-surface">Find services near you</h2>
+              </div>
+              <p className="text-body-md text-on-surface-variant leading-relaxed">{directory.note}</p>
+              {directory.url && (
+                <a
+                  href={directory.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary py-3 px-5 rounded-xl text-label-md font-bold hover:opacity-90 transition-all min-h-[44px]"
+                  aria-label={directory.label}
+                >
+                  {directory.label}
+                  <span className="material-symbols-outlined" style={{ fontSize: "1.1rem" }} aria-hidden="true">open_in_new</span>
+                </a>
+              )}
+              {directory.attribution && (
+                <p className="text-label-sm text-on-surface-variant/50">{directory.attribution}</p>
+              )}
+            </article>
+          )}
 
           {/* Retake CTA */}
           <article className="bg-primary-container text-on-primary-container p-6 rounded-2xl soft-elevation flex flex-col justify-center items-center text-center space-y-6">

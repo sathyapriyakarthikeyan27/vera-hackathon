@@ -195,15 +195,25 @@ async def revoke_refresh_tokens(user_id: str) -> None:
 # ── Session linking ──────────────────────────────────────────────────────────
 
 async def attach_session_to_user(session_id: str, user_id: str) -> bool:
-    """Bind an anonymous VERA session to an authenticated user."""
+    """
+    Bind an anonymous VERA session to an authenticated user.
+
+    Only binds if the session is unowned (or already owned by this user).
+    Never re-binds a session that belongs to someone else — a leaked session
+    UUID must not let another account claim a person's health profile.
+    """
     try:
         sid = uuid.UUID(session_id)
     except (ValueError, TypeError):
         return False
+    uid = uuid.UUID(user_id)
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute(
-            "UPDATE sessions SET user_id = $2 WHERE session_id = $1",
-            sid, uuid.UUID(user_id),
+            """
+            UPDATE sessions SET user_id = $2
+            WHERE session_id = $1 AND (user_id IS NULL OR user_id = $2)
+            """,
+            sid, uid,
         )
     return result.split()[-1] != "0"

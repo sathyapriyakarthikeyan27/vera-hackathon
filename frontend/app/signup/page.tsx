@@ -111,8 +111,6 @@ function mapGender(g: string): "female" | "male" | "other" {
   return "other";
 }
 
-const today = new Date().toISOString().split("T")[0];
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function VeraLogo({ className = "h-10 w-auto" }: { className?: string }) {
@@ -245,6 +243,75 @@ function CityCombobox({
   );
 }
 
+// ── Date of birth picker (Day / Month / Year selects) ───────────────────────
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function DateOfBirthPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const parts = value ? value.split("-") : [];
+  const y = parts[0] ?? "";
+  const m = parts[1] ? String(Number(parts[1])) : "";
+  const d = parts[2] ? String(Number(parts[2])) : "";
+
+  // Only offer birth years for adults (18+); the youngest allowed birth year is
+  // the current year minus 18, oldest is 100 years back.
+  const maxYear = new Date().getFullYear() - 18;
+  const years = Array.from({ length: 83 }, (_, i) => maxYear - i);
+  const daysInMonth = y && m ? new Date(Number(y), Number(m), 0).getDate() : 31;
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  function update(part: "y" | "m" | "d", val: string) {
+    const ny = part === "y" ? val : y;
+    const nm = part === "m" ? val : m;
+    let nd = part === "d" ? val : d;
+    if (ny && nm && nd) {
+      const dim = new Date(Number(ny), Number(nm), 0).getDate();
+      if (Number(nd) > dim) nd = String(dim); // clamp e.g. 31 -> 30/28
+      onChange(`${ny}-${nm.padStart(2, "0")}-${nd.padStart(2, "0")}`);
+    } else {
+      onChange("");
+    }
+  }
+
+  const SELECT =
+    "w-full px-3 py-3 rounded-xl border border-outline bg-surface-container-low text-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary/10 transition-all min-h-[48px]";
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <div>
+        <label htmlFor="dob-day" className="sr-only">Day of birth</label>
+        <select id="dob-day" value={d} onChange={(e) => update("d", e.target.value)} className={SELECT} required aria-required="true">
+          <option value="" disabled>Day</option>
+          {days.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="dob-month" className="sr-only">Month of birth</label>
+        <select id="dob-month" value={m} onChange={(e) => update("m", e.target.value)} className={SELECT} required aria-required="true">
+          <option value="" disabled>Month</option>
+          {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="dob-year" className="sr-only">Year of birth</label>
+        <select id="dob-year" value={y} onChange={(e) => update("y", e.target.value)} className={SELECT} required aria-required="true">
+          <option value="" disabled>Year</option>
+          {years.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SignupPage() {
@@ -284,7 +351,21 @@ export default function SignupPage() {
       router.push("/assessment");
     } catch (e) {
       console.error("Signup error:", e);
-      setError("Something went wrong. Please check your details and try again.");
+      // Surface the backend's own message when it sent one (e.g. the under-18
+      // notice), instead of a generic error.
+      let detail: string | null = null;
+      if (e instanceof Error) {
+        const start = e.message.indexOf("{");
+        if (start !== -1) {
+          try {
+            const parsed = JSON.parse(e.message.slice(start));
+            if (typeof parsed.detail === "string") detail = parsed.detail;
+          } catch {
+            // fall through to the generic message
+          }
+        }
+      }
+      setError(detail ?? "Something went wrong. Please check your details and try again.");
       setLoading(false);
     }
   }
@@ -350,19 +431,10 @@ export default function SignupPage() {
                   {/* DOB + Gender row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label htmlFor="dob" className="block text-label-md text-on-surface-variant mb-2">
+                      <span className="block text-label-md text-on-surface-variant mb-2">
                         Date of Birth
-                      </label>
-                      <input
-                        id="dob"
-                        type="date"
-                        value={dob}
-                        onChange={(e) => setDob(e.target.value)}
-                        max={today}
-                        className="w-full px-4 py-3 rounded-xl border border-outline bg-surface-container-low text-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary/10 transition-all"
-                        required
-                        aria-required="true"
-                      />
+                      </span>
+                      <DateOfBirthPicker value={dob} onChange={setDob} />
                     </div>
                     <div>
                       <label htmlFor="gender" className="block text-label-md text-on-surface-variant mb-2">

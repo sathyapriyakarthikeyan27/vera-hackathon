@@ -18,10 +18,17 @@ function LoginForm() {
   const sessionId =
     typeof window !== "undefined" ? localStorage.getItem("vera_session_id") ?? undefined : undefined;
 
+  const oauthError = params.get("error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    oauthError === "oauth_unverified"
+      ? "Your Google email is not verified yet, so I could not link it to your account. Please sign in with your password instead."
+      : oauthError
+        ? "Google sign-in did not complete. Please try again."
+        : null
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

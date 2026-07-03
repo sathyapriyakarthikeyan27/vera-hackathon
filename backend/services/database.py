@@ -56,6 +56,7 @@ async def close_pool() -> None:
 
 async def insert_checkin(session_id: str, role: str, content: str, embedding: Optional[list] = None) -> None:
     import uuid
+    from services import crypto
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
@@ -63,12 +64,13 @@ async def insert_checkin(session_id: str, role: str, content: str, embedding: Op
             INSERT INTO checkin_memory (session_id, role, content, embedding)
             VALUES ($1, $2, $3, $4)
             """,
-            uuid.UUID(session_id), role, content, embedding,
+            uuid.UUID(session_id), role, crypto.encrypt_str(content), embedding,
         )
 
 
 async def get_checkin_history(session_id: str, limit: int = 10) -> list[dict]:
     import uuid
+    from services import crypto
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -82,7 +84,8 @@ async def get_checkin_history(session_id: str, limit: int = 10) -> list[dict]:
             uuid.UUID(session_id), limit,
         )
     return [
-        {"role": r["role"], "content": r["content"], "created_at": r["created_at"].isoformat()}
+        {"role": r["role"], "content": crypto.decrypt_str(r["content"]),
+         "created_at": r["created_at"].isoformat()}
         for r in rows
     ]
 
@@ -118,6 +121,27 @@ async def count_schemes() -> int:
     pool = await get_pool()
     async with pool.acquire() as conn:
         return await conn.fetchval("SELECT COUNT(*) FROM scheme_data")
+
+
+async def list_schemes_by_country(country: str, limit: int = 4) -> list[dict]:
+    """Plain country lookup over curated scheme_data, no embedding required.
+
+    Fallback for when vector search finds nothing (e.g. rows whose embeddings could
+    not be generated). Returns curated, human-written schemes — not generated content.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT scheme_name, content, metadata
+            FROM scheme_data
+            WHERE ($1 = '' OR country ILIKE $1 OR $1 ILIKE '%' || country || '%')
+            ORDER BY id
+            LIMIT $2
+            """,
+            country, limit,
+        )
+    return [dict(r) for r in rows]
 
 
 async def insert_scheme(scheme_name: str, country: str, cancer_types: list, content: str, metadata: dict, embedding: Optional[list]) -> None:

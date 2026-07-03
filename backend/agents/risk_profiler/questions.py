@@ -3,6 +3,8 @@ Health questions for the Risk Profiler adaptive chat.
 Name, age, gender, location, and language are collected at sign-up — not here.
 """
 
+from typing import Optional
+
 QUESTIONS: list[dict] = [
     {
         "id": "q1",
@@ -68,7 +70,7 @@ QUESTIONS: list[dict] = [
 ]
 
 
-def format_question(q: dict, answers: dict | None = None) -> dict:
+def format_question(q: dict, answers: Optional[dict] = None) -> dict:
     """Interpolate collected answers into question text (e.g. {user_name})."""
     text = q["question"]
     if answers and "{" in text:

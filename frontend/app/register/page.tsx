@@ -16,7 +16,6 @@ export default function RegisterPage() {
   const sessionId =
     typeof window !== "undefined" ? localStorage.getItem("vera_session_id") ?? undefined : undefined;
 
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,7 +30,8 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
     try {
-      await register(email.trim(), password, name.trim() || undefined);
+      // Name is collected in onboarding (/signup), not here.
+      await register(email.trim(), password);
       // New account has no health profile yet — send them to onboarding.
       router.replace("/signup");
     } catch (e) {
@@ -56,19 +56,6 @@ export default function RegisterPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        <div>
-          <label htmlFor="name" className="block text-label-md text-on-surface-variant mb-2">
-            Name <span className="text-on-surface-variant/60">(optional)</span>
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={INPUT}
-            autoComplete="name"
-          />
-        </div>
         <div>
           <label htmlFor="email" className="block text-label-md text-on-surface-variant mb-2">
             Email

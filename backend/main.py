@@ -1,17 +1,22 @@
+import datetime
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 import os
 from dotenv import load_dotenv
 
-from services.session_store import init_db, create_session, get_session, update_session
+from services.session_store import init_db, create_session, update_session, encrypt_existing_rows
 from services.database import close_pool
 from services.gemini import validate_key_on_startup
-from services import cache
+from services import auth_store, cache, crypto
+from services.authz import require_session_access
+from services.ratelimit import rate_limit
+from services.security import validate_secrets_on_startup
 from routers import risk, schemes, education, companion, records, auth, reminders, notifications
+from routers.auth import get_current_user
 
 load_dotenv()
 
@@ -20,10 +25,14 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(messa
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_secrets_on_startup()
+    crypto.validate_key_on_startup()
     validate_key_on_startup()
     await init_db()
     from db.seed import seed_scheme_data
     await seed_scheme_data()
+    # One-time sweep: rows written before encryption existed get encrypted now.
+    await encrypt_existing_rows()
     if await cache.ping():
         logging.getLogger(__name__).info("STARTUP: Redis LLM cache connected.")
     else:
@@ -54,12 +63,17 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# Gemini-backed agent routers get a per-IP ceiling so a single client cannot
+# run up model costs. Generous enough for real use (assessment auto-advance,
+# uploads, chat); auth endpoints carry their own stricter limits.
+_agent_limit = [Depends(rate_limit("agent", 30, 60))]
+
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
-app.include_router(risk.router, prefix="/risk", tags=["Risk Profiler"])
-app.include_router(schemes.router, prefix="/schemes", tags=["Scheme Navigator"])
-app.include_router(education.router, prefix="/education", tags=["Education Agent"])
-app.include_router(companion.router, prefix="/companion", tags=["Companion Agent"])
-app.include_router(records.router, prefix="/records", tags=["Records Explainer"])
+app.include_router(risk.router, prefix="/risk", tags=["Risk Profiler"], dependencies=_agent_limit)
+app.include_router(schemes.router, prefix="/schemes", tags=["Scheme Navigator"], dependencies=_agent_limit)
+app.include_router(education.router, prefix="/education", tags=["Education Agent"], dependencies=_agent_limit)
+app.include_router(companion.router, prefix="/companion", tags=["Companion Agent"], dependencies=_agent_limit)
+app.include_router(records.router, prefix="/records", tags=["Records Explainer"], dependencies=_agent_limit)
 app.include_router(reminders.router, prefix="/reminders", tags=["Reminders"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 
@@ -91,20 +105,52 @@ class SignupRequest(BaseModel):
     date_of_birth: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
-@app.post("/session", tags=["Session"], status_code=201)
-async def create_session_endpoint(body: SessionRequest = SessionRequest()):
-    return await create_session(body.language)
+@app.post(
+    "/session", tags=["Session"], status_code=201,
+    dependencies=[Depends(rate_limit("session_create", 20, 3600))],
+)
+async def create_session_endpoint(
+    body: SessionRequest = SessionRequest(),
+    user: dict = Depends(get_current_user),
+):
+    session = await create_session(body.language)
+    await auth_store.attach_session_to_user(session["session_id"], user["id"])
+    return session
 
 
-@app.post("/session/signup", tags=["Session"], status_code=201)
+@app.post(
+    "/session/signup", tags=["Session"], status_code=201,
+    dependencies=[Depends(rate_limit("session_create", 20, 3600))],
+)
 @app.post("/signup", tags=["Session"], status_code=201, include_in_schema=False)
-async def signup_endpoint(body: SignupRequest):
+async def signup_endpoint(body: SignupRequest, user: dict = Depends(get_current_user)):
     """
     Minimal-friction sign-up: creates a session and pre-fills name, age, gender,
     location, and language so the chat can start directly at health questions.
+    The session is bound to the authenticated account at creation.
     """
+    # VERA is for adults. DOB is optional, so this only catches declared minors;
+    # age_group "under_25" without a DOB cannot be verified (known limitation).
+    if body.date_of_birth:
+        try:
+            dob = datetime.date.fromisoformat(body.date_of_birth)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Please enter a valid date of birth.")
+        today = datetime.date.today()
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        if age < 18:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "VERA is designed for adults aged 18 and over. If you are worried "
+                    "about your health, please talk to a parent, guardian, or doctor. "
+                    "They can help you get the right care."
+                ),
+            )
+
     session = await create_session(body.language)
     sid = session["session_id"]
+    await auth_store.attach_session_to_user(sid, user["id"])
     await update_session(sid, {
         "user_name": body.name,
         "language": body.language,
@@ -128,8 +174,5 @@ async def signup_endpoint(body: SignupRequest):
 
 
 @app.get("/session/{session_id}", tags=["Session"])
-async def get_session_endpoint(session_id: str):
-    session = await get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
+async def get_session_endpoint(session_id: str, user: dict = Depends(get_current_user)):
+    return await require_session_access(session_id, user)

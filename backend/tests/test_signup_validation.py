@@ -103,23 +103,23 @@ def test_accepts_none_dob():
 
 def test_rejects_unknown_gender():
     with pytest.raises(ValidationError):
-        SignupRequest(**VALID_BASE, gender="unknown")
+        SignupRequest(**{**VALID_BASE, "gender": "unknown"})
 
 
 def test_accepts_all_valid_genders():
     for g in ("female", "male", "other"):
-        r = SignupRequest(**VALID_BASE, gender=g)
+        r = SignupRequest(**{**VALID_BASE, "gender": g})
         assert r.gender == g
 
 
 def test_rejects_unknown_age_group():
     with pytest.raises(ValidationError):
-        SignupRequest(**VALID_BASE, age_group="60_plus")
+        SignupRequest(**{**VALID_BASE, "age_group": "60_plus"})
 
 
 def test_accepts_all_valid_age_groups():
     for ag in ("under_25", "25_34", "35_44", "45_54", "55_plus"):
-        r = SignupRequest(**VALID_BASE, age_group=ag)
+        r = SignupRequest(**{**VALID_BASE, "age_group": ag})
         assert r.age_group == ag
 
 

@@ -12,14 +12,11 @@ this is a hard privacy requirement, not optional.
 """
 
 import asyncio
-import base64
-import json
 from typing import Optional
-
-from fastapi import UploadFile
 
 from services.session_store import get_session, update_session
 from services import gemini
+from . import prompts
 
 _LANG_NAME = {
     "en": "English", "hi": "Hindi", "ta": "Tamil", "ar": "Arabic",
@@ -45,14 +42,12 @@ _FALLBACK_SIGNALS = {
 }
 
 
-async def analyze(session_id: str, file: UploadFile) -> Optional[dict]:
+async def analyze(session_id: str, content: bytes, mime_type: str, filename: str) -> Optional[dict]:
+    """Analyze an uploaded document. The router validates type, size, and magic
+    bytes before this is called; `content` is held in memory only."""
     session = await get_session(session_id)
     if not session:
         return None
-
-    content: bytes = await file.read()
-    mime_type: str = file.content_type or "image/jpeg"
-    filename: str = file.filename or "document"
 
     user_name: str = session.get("user_name") or ""
     language: str = session.get("language") or "en"
@@ -104,71 +99,31 @@ async def _explain_document(
 ) -> dict:
     lang = _LANG_NAME.get(language, "English")
     name_clause = f"This person's name is {user_name}. " if user_name else ""
-    b64 = base64.b64encode(content).decode()
 
-    prompt = f"""You are VERA, a warm and caring health AI companion.
-
-{name_clause}Please explain this medical document in plain language in {lang}.
-
-Structure your response in exactly this order:
-1. What this document is (1 sentence)
-2. Key findings — what it shows (2-3 sentences, plain language only)
-3. Anything that needs attention — flag urgently but calmly, never alarming
-4. What to do next (1-2 concrete sentences)
-
-Rules:
-- Never diagnose. Never say "you have cancer" or equivalent.
-- No medical jargon without plain-language explanation in parentheses.
-- If something is flagged as abnormal, say so clearly but calmly.
-- End with: "This is a plain-language explanation only. Please discuss these findings with your doctor."
-- Write in {lang}.
-- Do not use em dashes."""
+    prompt = prompts.explain_prompt(name_clause, lang)
 
     text = await gemini.generate_pro_multimodal_safe(
-        parts=[{"mime_type": mime_type, "data": b64}, prompt],
+        parts=[{"mime_type": mime_type, "data": content}, prompt],
         fallback=_FALLBACK_EXPLANATION["text"],
     )
 
-    return {"text": text or _FALLBACK_EXPLANATION["text"], "language": language, "document_type": ""}
+    return {
+        "text": text or _FALLBACK_EXPLANATION["text"],
+        "language": language,
+        "document_type": "",
+        # Audit trail: which model and prompt produced this explanation.
+        "model": gemini.GEMINI_PRO,
+        "prompt_version": prompts.EXPLAIN_PROMPT_VERSION,
+    }
 
 
 async def _extract_signals(content: bytes, mime_type: str) -> dict:
-    b64 = base64.b64encode(content).decode()
-
-    prompt = """You are a clinical data extraction system. Read this medical document carefully and extract structured clinical signals for a cancer risk assessment system.
-
-Your task is to identify findings that are relevant to cancer risk — abnormalities, polyps, lesions, irregular tissue, elevated markers, or recommendations for urgent follow-up.
-
-You MUST return ONLY a valid JSON object in exactly this format. No prose before or after. No markdown fences. No explanation. Just the JSON:
-{
-  "anomalies": ["specific finding 1", "specific finding 2"],
-  "severity": "high",
-  "confidence": 0.85,
-  "specialist_signal": "Gastroenterologist",
-  "urgency_flag": true
-}
-
-Field definitions — follow these exactly:
-- "anomalies": array of strings. Each string is one specific clinical finding, quoted directly or paraphrased from the document. Be specific: "12mm tubulovillous adenoma, ascending colon" not "abnormality found". Empty array [] if document is normal.
-- "severity": exactly one of "high", "medium", or "low". Use "high" if findings indicate elevated cancer risk or require urgent follow-up. Use "medium" if findings warrant monitoring. Use "low" if the document is normal or routine.
-- "confidence": float 0.0 to 1.0. How confident you are in this extraction based on document clarity and specificity of findings.
-- "specialist_signal": string with the exact specialist type most relevant to these findings (e.g. "Gastroenterologist", "Oncologist", "Pulmonologist", "Dermatologist"), or null if not indicated.
-- "urgency_flag": true if the document recommends urgent follow-up, repeat procedure, or immediate specialist referral. Otherwise false.
-
-If the document is normal with no concerning findings: anomalies=[], severity="low", urgency_flag=false.
-Return only the JSON object."""
-
     try:
         raw = await gemini.generate_pro_multimodal(
-            parts=[{"mime_type": mime_type, "data": b64}, prompt]
+            parts=[{"mime_type": mime_type, "data": content}, prompts.SIGNALS_PROMPT],
+            json_mode=True,
         )
-        text = raw.strip()
-        if text.startswith("```"):
-            parts_list = text.split("```")
-            text = parts_list[1] if len(parts_list) > 1 else text
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
+        result = gemini.parse_json(raw)
     except Exception:
         return _FALLBACK_SIGNALS
 
@@ -176,12 +131,33 @@ Return only the JSON object."""
         return _FALLBACK_SIGNALS
 
     return {
-        "anomalies": result.get("anomalies") or [],
-        "severity": result.get("severity", "medium"),
-        "confidence": float(result.get("confidence", 0.7)),
+        "anomalies": _safe_anomalies(result.get("anomalies")),
+        "severity": _safe_severity(result.get("severity")),
+        "confidence": _safe_confidence(result.get("confidence")),
         "specialist_signal": result.get("specialist_signal"),
         "urgency_flag": bool(result.get("urgency_flag", False)),
+        # Audit trail: which model and prompt produced these signals.
+        "model": gemini.GEMINI_PRO,
+        "prompt_version": prompts.SIGNALS_PROMPT_VERSION,
     }
+
+
+def _safe_anomalies(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(v) for v in value if v]
+
+
+def _safe_severity(value) -> str:
+    return value if value in ("high", "medium", "low") else "medium"
+
+
+def _safe_confidence(value) -> float:
+    """Model output is untrusted: clamp to [0, 1], never raise."""
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return 0.7
 
 
 def _guess_doc_type(mime_type: str, filename: str) -> str:

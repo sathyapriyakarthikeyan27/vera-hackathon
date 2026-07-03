@@ -1,12 +1,15 @@
 """Companion Agent router."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import logging
+import os
 
 from agents.companion_agent import agent as companion_agent
-from services.session_store import get_session
+from agents.companion_agent import prompts as companion_prompts
+from routers.auth import get_current_user
+from services.authz import require_session_access
 from services.database import insert_checkin
 from services import gemini, reminder_store
 
@@ -25,20 +28,18 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/followup")
-async def generate_followup(body: FollowupRequest):
+async def generate_followup(body: FollowupRequest, user: dict = Depends(get_current_user)):
+    session = await require_session_access(body.session_id, user)
     result = await companion_agent.generate_followup(body.session_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Session not found")
 
     # Materialize the reminder schedule into durable, deduped reminder rows so the
     # notification bell can surface them. Non-fatal: never break the followup response.
     try:
-        session = await get_session(body.session_id)
-        user_id = session.get("user_id") if session else None
+        user_id = session.get("user_id")
         await reminder_store.materialize(
             session_id=body.session_id,
             user_id=str(user_id) if user_id else None,
-            reminder_schedule=result.get("reminder_schedule") or [],
+            reminder_schedule=(result or {}).get("reminder_schedule") or [],
         )
     except Exception:
         logger.warning("Reminder materialization failed for session %s", body.session_id, exc_info=False)
@@ -46,12 +47,16 @@ async def generate_followup(body: FollowupRequest):
     return result
 
 
-@router.post("/checkin")
-async def simulate_checkin(body: FollowupRequest):
-    """Demo endpoint: simulates a proactive 3-days-later check-in from VERA."""
-    session = await get_session(body.session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+@router.post("/checkin", include_in_schema=False)
+async def simulate_checkin(body: FollowupRequest, user: dict = Depends(get_current_user)):
+    """Internal testing endpoint: simulates a proactive 3-days-later check-in.
+
+    Hidden in production (404) — real check-ins are driven by the scheduler.
+    Enable in dev/staging with ENABLE_TEST_ENDPOINTS=true.
+    """
+    if os.getenv("ENABLE_TEST_ENDPOINTS", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Not found")
+    session = await require_session_access(body.session_id, user)
 
     user_name: str = session.get("user_name") or ""
     risk_profile: dict = session.get("risk_profile") or {}
@@ -61,15 +66,8 @@ async def simulate_checkin(body: FollowupRequest):
     next_action = plan[0]["action"] if plan else "book your free screening"
 
     name_clause = f" {user_name}," if user_name else ","
-    prompt = (
-        f"You are VERA, a warm health AI companion. "
-        f"It has been 3 days since{name_clause} you completed your cancer risk assessment showing {risk_level} risk. "
-        f"Your next step was to: {next_action}. "
-        f"Write a warm, brief 2-sentence proactive check-in message asking how they are doing and whether they have been able to take that step. "
-        f"Do not repeat the full plan. Be warm and personal. No em dashes."
-    )
     message = await gemini.generate_safe(
-        prompt,
+        companion_prompts.checkin_prompt(name_clause, risk_level, next_action),
         fallback=(
             f"Hi{name_clause} just checking in. It's been a few days since your VERA assessment. "
             f"Have you had a chance to take your next step? I'm here if you need help finding the right clinic."
@@ -86,58 +84,41 @@ async def simulate_checkin(body: FollowupRequest):
 
 
 @router.get("/history")
-async def checkin_history(session_id: str):
+async def checkin_history(session_id: str, user: dict = Depends(get_current_user)):
     """Return the stored check-in history for a session."""
     from services.database import get_checkin_history
-    session = await get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    await require_session_access(session_id, user)
     history = await get_checkin_history(session_id)
     return {"history": history}
 
 
 @router.post("/chat")
-async def companion_chat(body: ChatRequest):
+async def companion_chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     """Chat with VERA about uploaded records and risk profile."""
-    session = await get_session(body.session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await require_session_access(body.session_id, user)
 
     user_name: str = session.get("user_name") or ""
     records_output: dict = session.get("records_output") or {}
     risk_assessment: dict = session.get("risk_assessment") or {}
     risk_profile: dict = session.get("risk_profile") or {}
 
-    doc_explanation: str = records_output.get("text", "")
-    doc_type: str = records_output.get("document_type", "medical document")
-    risk_score: str = (
-        risk_assessment.get("score")
-        or risk_profile.get("risk_level", "Unknown")
+    prompt = companion_prompts.chat_prompt(
+        user_name=user_name,
+        risk_score=(
+            risk_assessment.get("score")
+            or risk_profile.get("risk_level", "Unknown")
+        ),
+        doc_type=records_output.get("document_type", "medical document"),
+        doc_explanation=records_output.get("text", ""),
+        risk_reasoning=(
+            risk_assessment.get("reasoning")
+            or risk_profile.get("plain_language_summary", "")
+        ),
+        message=body.message,
     )
-    risk_reasoning: str = (
-        risk_assessment.get("reasoning")
-        or risk_profile.get("plain_language_summary", "")
-    )
-
-    context_parts = [
-        f"You are VERA, a warm and caring health AI companion.",
-        f"User: {user_name or 'the user'}. Current risk level: {risk_score}.",
-    ]
-    if doc_explanation:
-        context_parts.append(
-            f"The user has uploaded a {doc_type}. Here is the plain-language explanation:\n{doc_explanation}"
-        )
-    if risk_reasoning:
-        context_parts.append(f"Risk reasoning: {risk_reasoning}")
-
-    context_parts += [
-        f"Answer the user's question based on the above context.",
-        "Rules: be warm and specific, never diagnose, no em dashes, 3-5 sentences unless more detail is needed.",
-        f"User question: {body.message}",
-    ]
 
     reply = await gemini.generate_safe(
-        "\n\n".join(context_parts),
+        prompt,
         fallback="I'm having trouble processing that right now. Please try again, or speak with your doctor for guidance.",
     )
     return {"reply": reply}

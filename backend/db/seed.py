@@ -4,12 +4,9 @@ Called at startup only if the table is empty.
 Embeddings generated via Gemini text-embedding-004 (768-dimensional).
 """
 
-import asyncio
 import logging
 import os
 from typing import Optional
-
-import google.generativeai as genai
 
 from services.database import count_schemes, insert_scheme
 
@@ -171,13 +168,8 @@ async def _embed(text: str) -> Optional[list]:
     try:
         if not os.getenv("GEMINI_API_KEY"):
             return None
-        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        result = await asyncio.to_thread(
-            genai.embed_content,
-            model="models/embedding-001",
-            content=text,
-        )
-        return result["embedding"]
+        from services import gemini
+        return await gemini.embed_text(text)  # legacy scheme_data vector space
     except Exception as exc:
         logger.warning("Embedding failed: %s", exc)
         return None

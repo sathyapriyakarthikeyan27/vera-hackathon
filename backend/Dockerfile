@@ -6,6 +6,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Chromium for the Playwright render path (gated/SPA sources). Installed to a
+# world-readable shared path so the non-root user can launch it. Cached separately from
+# source so code changes don't re-download the browser.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium && chmod -R a+rx /ms-playwright
+
 COPY . .
 
 # Create data dir for SQLite

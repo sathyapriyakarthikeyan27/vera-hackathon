@@ -10,6 +10,7 @@ from typing import Optional
 
 from services.session_store import get_session, update_session
 from services import gemini
+from . import prompts
 
 _SCREENING_NAME = {
     "cervical": "Pap smear (cervical screening)",
@@ -98,20 +99,9 @@ async def _generate_intro(
     user_name: str, risk_level: str, cancer_type: str, language: str
 ) -> str:
     lang = _LANG_NAME.get(language, "English")
-    name_clause = f"Her name is {user_name}." if user_name else ""
+    name_clause = f"Their name is {user_name}." if user_name else ""
 
-    prompt = f"""You are VERA, a warm and caring women's health AI companion.
-
-Write exactly 2 sentences as a personal introduction to a cancer education section.
-{name_clause}
-Context: She has {risk_level} {cancer_type} cancer risk and has just completed her risk assessment.
-
-Rules:
-- Address her by name if given, otherwise use "you"
-- Be warm, encouraging, and specific to {cancer_type} cancer
-- Reassure her that learning about this is a powerful first step
-- Write in {lang}
-- Maximum 2 sentences. No lists, no headings."""
+    prompt = prompts.intro_prompt(name_clause, risk_level, cancer_type, lang)
 
     fallback = (
         f"Understanding {cancer_type} cancer is one of the most important steps you can take for your health. "
@@ -125,39 +115,11 @@ async def _generate_sections(cancer_type: str, language: str) -> list[dict]:
     lang = _LANG_NAME.get(language, "English")
     screening = _SCREENING_NAME.get(cancer_type, f"{cancer_type} cancer screening")
 
-    prompt = f"""You are VERA's Education Agent. Create a plain-language health education guide about {cancer_type} cancer screening.
-
-Generate exactly 4 educational sections as a JSON array:
-[
-  {{
-    "title": "What is {cancer_type} cancer?",
-    "content": "2-3 sentences in plain, everyday language. No medical jargon. Warm and reassuring."
-  }},
-  {{
-    "title": "What does a {screening} involve?",
-    "content": "2-3 sentences describing the screening process step by step. Focus on what she will experience."
-  }},
-  {{
-    "title": "What to expect on the day",
-    "content": "2-3 sentences on what happens at the appointment. Practical, calming, and specific."
-  }},
-  {{
-    "title": "Understanding your results",
-    "content": "2-3 sentences on the result timeline and what different results mean. Hopeful and clear."
-  }}
-]
-
-Write all content in {lang}. Return ONLY the JSON array. No markdown, no explanation."""
+    prompt = prompts.sections_prompt(cancer_type, screening, lang)
 
     try:
-        raw = await gemini.generate(prompt)
-        text = raw.strip()
-        if text.startswith("```"):
-            parts = text.split("```")
-            text = parts[1] if len(parts) > 1 else text
-            if text.startswith("json"):
-                text = text[4:]
-        sections = json.loads(text.strip())
+        raw = await gemini.generate_json(prompt, temperature=0.4)
+        sections = gemini.parse_json(raw)
         return sections if isinstance(sections, list) else _FALLBACK_SECTIONS
     except Exception:
         return _FALLBACK_SECTIONS

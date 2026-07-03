@@ -175,6 +175,39 @@ export default function RiskPage() {
           <ConflictCard conflict={session.risk_assessment.conflict} className="mb-stack-lg" />
         )}
 
+        {/* Urgent risk — time-sensitive guidance with emergency information */}
+        {riskLevel === "Urgent" && (
+          <section
+            role="alert"
+            className="mb-stack-lg bg-error-container border-2 border-error rounded-2xl p-stack-md"
+          >
+            <div className="flex items-start gap-4">
+              <span
+                className="material-symbols-outlined text-3xl text-error shrink-0"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+                aria-hidden="true"
+              >
+                emergency
+              </span>
+              <div>
+                <h2 className="text-title-lg text-on-error-container font-semibold mb-2">
+                  Please do not wait on this
+                </h2>
+                <p className="text-body-md text-on-error-container leading-relaxed mb-3">
+                  Your results suggest you should speak with a doctor in the next few days,
+                  not the next few months. I have prepared your care options below to make
+                  that first call easier.
+                </p>
+                <p className="text-body-md text-on-error-container leading-relaxed font-medium">
+                  If you have severe symptoms right now, such as heavy bleeding, severe pain,
+                  or trouble breathing, call your local emergency number or go to the nearest
+                  emergency department.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Bento grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
 

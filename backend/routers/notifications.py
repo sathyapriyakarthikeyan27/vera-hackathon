@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from routers.auth import get_current_user
 from services import auth_store, notification_prefs
+from services.ratelimit import enforce_user_limit, rate_limit
 from services.sms import send_sms
 
 router = APIRouter()
@@ -79,8 +80,10 @@ async def update_preferences(body: PrefsBody, user: dict = Depends(get_current_u
     return _response(prefs, user)
 
 
-@router.post("/phone/send-otp")
+@router.post("/phone/send-otp", dependencies=[Depends(rate_limit("otp_send_ip", 10, 3600))])
 async def send_phone_otp(body: PhoneBody, user: dict = Depends(get_current_user)):
+    # SMS costs money and codes should be scarce: 3 sends per user per 10 minutes.
+    await enforce_user_limit(user["id"], "otp_send", 3, 600)
     if not E164.match(body.phone):
         raise HTTPException(
             status_code=422,
@@ -95,6 +98,8 @@ async def send_phone_otp(body: PhoneBody, user: dict = Depends(get_current_user)
 
 @router.post("/phone/verify")
 async def verify_phone_otp(body: CodeBody, user: dict = Depends(get_current_user)):
+    # Attempt cap: a 6-digit code must not be brute-forceable within its TTL.
+    await enforce_user_limit(user["id"], "otp_verify", 5, 600)
     ok = await auth_store.consume_user_token(user["id"], "otp", body.code)
     if not ok:
         raise HTTPException(status_code=400, detail="That code is invalid or has expired.")

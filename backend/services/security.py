@@ -28,13 +28,29 @@ EMAIL_VERIFY_TTL = int(os.getenv("EMAIL_VERIFY_TTL", "86400"))  # 24 hours
 RESET_TTL = int(os.getenv("PASSWORD_RESET_TTL", "3600"))        # 1 hour
 
 
+_DEV_FALLBACK_SECRET = "dev-insecure-secret-change-me"
+
+
 def _secret() -> str:
     # Fall back to SESSION_SECRET so the app runs without a separate JWT_SECRET.
     return (
         os.getenv("JWT_SECRET")
         or os.getenv("SESSION_SECRET")
-        or "dev-insecure-secret-change-me"
+        or _DEV_FALLBACK_SECRET
     )
+
+
+def validate_secrets_on_startup() -> None:
+    """
+    Fail closed in production. With the dev fallback secret anyone can forge
+    access tokens for any user, so refuse to boot rather than run insecurely.
+    """
+    env = os.getenv("APP_ENV", "development").strip().lower()
+    if env == "production" and _secret() == _DEV_FALLBACK_SECRET:
+        raise RuntimeError(
+            "APP_ENV=production but neither JWT_SECRET nor SESSION_SECRET is set. "
+            "Refusing to start with the insecure development secret."
+        )
 
 
 # ── Passwords ────────────────────────────────────────────────────────────────

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -35,13 +33,24 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
+      # Fail-closed secrets check: in production the backend refuses to start
+      # without JWT_SECRET or SESSION_SECRET. Override to "development" locally.
+      APP_ENV: ${APP_ENV:-production}
+      # Hidden testing endpoints (e.g. /companion/checkin) — keep false in prod.
+      ENABLE_TEST_ENDPOINTS: ${ENABLE_TEST_ENDPOINTS:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # Agent 3 records model. Leave unset for Pro (needs a paid key); set to
+      # gemini-2.5-flash for free-tier keys, which cannot call Pro at all.
+      GEMINI_PRO_MODEL: ${GEMINI_PRO_MODEL:-}
       DATABASE_URL: postgresql://vera:${POSTGRES_PASSWORD:-vera_dev}@db:5432/vera
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET}
       # Auth (Phase 0). JWT_SECRET falls back to SESSION_SECRET if unset.
       JWT_SECRET: ${JWT_SECRET:-}
+      # Field-level encryption of health data at rest. REQUIRED in production.
+      # Losing this key means losing the encrypted data — back it up securely.
+      VERA_ENCRYPTION_KEY: ${VERA_ENCRYPTION_KEY:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

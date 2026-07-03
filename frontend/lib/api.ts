@@ -6,15 +6,42 @@
 
 const BASE = "/api";
 
+/** One silent token refresh, shared by concurrent 401s so we never stampede. */
+let refreshPromise: Promise<boolean> | null = null;
+
+function refreshOnce(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retried = false
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...options.headers },
     credentials: "include", // send/receive httpOnly auth cookies (same-origin via proxy)
     ...options,
   });
+
+  // Access tokens are short-lived (~15 min). On a 401 mid-session, refresh
+  // silently and retry once. Auth endpoints are excluded to avoid loops.
+  if (res.status === 401 && !retried && !path.startsWith("/auth/")) {
+    if (await refreshOnce()) {
+      return request<T>(path, options, true);
+    }
+  }
 
   if (!res.ok) {
     const body = await res.text();
@@ -279,11 +306,26 @@ export interface SchemeMatch {
   eligibility_summary: string;
   coverage: string;
   url: string | null;
+  // Provenance (grounded RAG results only). Absent on curated/directory results.
+  why_matches?: string;
+  source?: "grounded" | "grounded_facts" | "grounded_passage" | "curated" | "directory";
+  publisher?: string | null;
+  last_verified?: string | null;
+  attribution?: string | null;
+}
+
+export interface CareDirectory {
+  label: string;
+  url: string | null;
+  note: string;
+  attribution?: string | null;
 }
 
 export interface SchemesOutput {
   matched_schemes: SchemeMatch[];
   nearest_clinics: Clinic[];
+  care_directory?: CareDirectory;
+  recommended_specialist?: string;
 }
 
 // ── Education ─────────────────────────────────────────────────────────────────
@@ -344,15 +386,6 @@ export async function generateFollowup(
   });
 }
 
-export async function simulateCheckin(
-  sessionId: string
-): Promise<{ checkin_message: string; simulated_days: number }> {
-  return request("/companion/checkin", {
-    method: "POST",
-    body: JSON.stringify({ session_id: sessionId }),
-  });
-}
-
 // ── Records Explainer ────────────────────────────────────────────────────────
 
 export interface ClinicalSignals {
@@ -408,7 +441,16 @@ export async function uploadRecord(
   const form = new FormData();
   form.append("session_id", sessionId);
   form.append("file", file);
-  const res = await fetch(`${BASE}/records/upload`, { method: "POST", body: form });
+  const send = () =>
+    fetch(`${BASE}/records/upload`, {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    });
+  let res = await send();
+  if (res.status === 401 && (await refreshOnce())) {
+    res = await send();
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`VERA API error ${res.status}: ${body}`);
